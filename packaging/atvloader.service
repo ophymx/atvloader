@@ -1,6 +1,6 @@
 [Unit]
 Description=atvloader — private Android TV app store
-Documentation=https://git.home.ophymx.com/ophymx/atvloader
+Documentation=https://github.com/ophymx/atvloader
 After=network-online.target
 Wants=network-online.target
 

@@ -5,7 +5,7 @@
 # built here. Stage it first with `make apk` so it gets embedded.
 #
 #   make snapshot   goreleaser release --snapshot --clean  (no tag, nothing published)
-#   make release    goreleaser release --clean             (tagged, publishes to Gitea)
+#   make release    goreleaser release --clean             (tagged, publishes a GitHub release)
 version: 2
 
 project_name: atvloader
@@ -51,7 +51,7 @@ nfpms:
     package_name: atvloader
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
     vendor: ophymx
-    homepage: https://git.home.ophymx.com/ophymx/atvloader
+    homepage: https://github.com/ophymx/atvloader
     maintainer: Jeffrey T. Peckham <abic@ophymx.com>
     description: |
       Private Android TV app store: APK catalog, device API and admin UI.
@@ -106,12 +106,10 @@ changelog:
       - "^chore:"
 
 release:
-  # Gitea release; set GITEA_TOKEN in the environment when running
-  # `goreleaser release`.
-  gitea:
+  # GitHub release on github.com/ophymx/atvloader; set GITHUB_TOKEN when
+  # running `goreleaser release`. prerelease: auto marks v0.1.0-rc1 etc.
+  github:
     owner: ophymx
     name: atvloader
-
-gitea_urls:
-  api: https://git.home.ophymx.com/api/v1
-  download: https://git.home.ophymx.com
+  draft: false
+  prerelease: auto

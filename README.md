@@ -46,7 +46,7 @@ make apk && docker compose up -d --build
 ```sh
 make apk
 make snapshot   # untagged: dist/atvloader_<ver>_{amd64,arm64}.deb + tarballs
-make release    # on a v* tag: same, published as a Gitea release (needs GITEA_TOKEN)
+make release    # on a v* tag: same, published as a GitHub release (needs GITHUB_TOKEN)
 ```
 
 Install with `dpkg -i`, then `systemctl start atvloader` and put nginx + oauth2-proxy in front (`/usr/share/doc/atvloader/nginx.conf.example`).

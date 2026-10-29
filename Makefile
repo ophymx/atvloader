@@ -4,7 +4,7 @@
 #   make docker   build the Docker image (expects `make apk` first, or an APK in server/self/)
 #   make run      run the server locally against ./data
 #   make snapshot untagged goreleaser build: dist/ gets tarballs + .deb for amd64/arm64
-#   make release  tagged goreleaser build, published to Gitea (needs GITEA_TOKEN)
+#   make release  tagged goreleaser build, published as a GitHub release (needs GITHUB_TOKEN)
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 APK = tv/app/build/outputs/apk/release/app-release.apk
