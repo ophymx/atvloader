@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATV Loader admin</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230F1216'/%3E%3Cpath d='M14 6h4v9h5l-7 8-7-8h5z' fill='%23B5D96A'/%3E%3Cpath d='M7 22v4h18v-4h-2v2H9v-2z' fill='%23B5D96A'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark"></span><span id="store-name">ATV Loader</span></div>
+  <nav class="tabs" role="tablist">
+    <a href="#apps" data-tab="apps" class="active">Apps</a>
+    <a href="#devices" data-tab="devices">Devices <span id="pending-badge" class="badge" hidden></span></a>
+  </nav>
+  <div class="who" id="who"></div>
+</header>
+
+<main id="page-apps" class="page">
+  <aside class="side">
+    <div id="drop" class="drop" tabindex="0">
+      <strong>Add APKs</strong>
+      <span>Drop files here or <label for="file" class="link">choose files</label>. Name, version and icon are read from the APK.</span>
+      <input id="file" type="file" accept=".apk,application/vnd.android.package-archive" multiple hidden>
+    </div>
+    <ul id="uploads" class="uploads"></ul>
+
+    <div class="filters">
+      <input id="search" type="search" placeholder="Find by name or package">
+      <ul id="cat-list" class="cat-list"></ul>
+      <label class="check"><input type="checkbox" id="show-hidden"> Show hidden apps</label>
+      <button class="ghost" id="edit-cats">Edit categories</button>
+    </div>
+  </aside>
+
+  <section class="list-wrap">
+    <div class="list-head">
+      <span id="count"></span>
+    </div>
+    <table class="apps">
+      <thead><tr><th></th><th>App</th><th>Category</th><th>Latest</th><th>Size</th><th>Shown as</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty" class="empty" hidden>
+      <p>No apps yet. Drop an APK on the left to start the shelf.</p>
+    </div>
+  </section>
+
+  <aside id="editor" class="editor" hidden>
+    <div class="editor-head">
+      <img id="ed-icon" class="icon lg" alt="">
+      <div>
+        <input id="ed-name" class="title-input" placeholder="App name">
+        <div class="mono dim" id="ed-pkg"></div>
+      </div>
+      <button class="ghost close" id="ed-close" aria-label="Close">×</button>
+    </div>
+    <label>Category
+      <input id="ed-cat" list="cat-options" placeholder="None">
+      <datalist id="cat-options"></datalist>
+    </label>
+    <label>Description
+      <textarea id="ed-desc" rows="4" placeholder="What is this, and why is it on the shelf?"></textarea>
+    </label>
+    <div class="row-flags">
+      <label class="check"><input type="checkbox" id="ed-featured"> Featured on the TV</label>
+      <label class="check"><input type="checkbox" id="ed-hidden"> Hidden from the TV</label>
+    </div>
+    <div class="actions">
+      <button class="primary" id="ed-save">Save changes</button>
+      <label class="ghost btn" for="ed-iconfile">Replace icon (PNG)</label>
+      <input id="ed-iconfile" type="file" accept="image/png" hidden>
+    </div>
+    <h3>Versions</h3>
+    <ul id="ed-versions" class="versions"></ul>
+    <p id="ed-self" class="dim" hidden>This is ATV Loader itself. The server publishes the APK it was built with, so TVs update the loader from here; it cannot be hidden or removed.</p>
+    <div class="danger">
+      <button class="ghost red" id="ed-delete">Remove app and all its files</button>
+    </div>
+  </aside>
+</main>
+
+<main id="page-devices" class="page" hidden>
+  <section class="pair">
+    <h2>Link a TV</h2>
+    <p>On the TV, open ATV Loader and enter this server's address. It shows a six-character code. Type it here, or approve it from the list below.</p>
+    <form id="pair-form" class="pair-form">
+      <input id="pair-code" class="code" maxlength="7" placeholder="ABC-DEF" autocomplete="off" spellcheck="false">
+      <input id="pair-name" placeholder="Name this TV (optional)">
+      <button class="primary" type="submit">Approve</button>
+    </form>
+    <div id="pair-msg" class="msg"></div>
+    <h3>Waiting for approval</h3>
+    <ul id="pending" class="pending"></ul>
+  </section>
+  <section class="devices-wrap">
+    <h2>Linked TVs</h2>
+    <table class="devices">
+      <thead><tr><th>Name</th><th>Model</th><th>Last seen</th><th>Approved</th><th></th></tr></thead>
+      <tbody id="devices"></tbody>
+    </table>
+    <p id="devices-empty" class="dim" hidden>No TVs are linked yet.</p>
+  </section>
+</main>
+
+<dialog id="cats-dialog">
+  <form method="dialog">
+    <h3>Categories</h3>
+    <p class="dim">One per line. This sets the order of the rows on the TV. Apps in other categories still show up after these.</p>
+    <textarea id="cats-text" rows="8"></textarea>
+    <div class="actions">
+      <button class="primary" value="save">Save</button>
+      <button class="ghost" value="cancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Name}}</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; background: #0f1216; color: #d9dee5; font-family: Inter, system-ui, -apple-system, Roboto, sans-serif; }
+  body { min-height: 100vh; display: grid; place-items: center; padding: 32px; box-sizing: border-box; }
+  main { max-width: 760px; width: 100%; }
+  .brand { display: flex; align-items: center; gap: 14px; color: #8b949f; font-size: 20px; margin-bottom: 28px; }
+  .brand svg { width: 36px; height: 36px; }
+  h1 { font-size: 44px; line-height: 1.1; margin: 0 0 12px; font-weight: 700; color: #fff; }
+  p { font-size: 20px; line-height: 1.5; margin: 0 0 20px; color: #aab3bd; }
+  .dl { display: inline-block; margin: 8px 0 28px; padding: 22px 36px; border-radius: 14px; background: #b5d96a; color: #0f1216;
+        font-size: 28px; font-weight: 700; text-decoration: none; border: 4px solid transparent; }
+  .dl:hover, .dl:focus { border-color: #fff; outline: none; }
+  .dl small { display: block; font-size: 15px; font-weight: 500; opacity: .75; margin-top: 4px; }
+  ol { font-size: 19px; line-height: 1.55; color: #aab3bd; padding-left: 24px; margin: 0 0 28px; }
+  li { margin-bottom: 8px; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; background: #1a1f26; color: #b5d96a; padding: 2px 8px; border-radius: 6px; font-size: 18px; }
+  .addr { font-size: 30px; padding: 6px 14px; display: inline-block; margin-top: 6px; }
+  .foot { display: flex; gap: 24px; flex-wrap: wrap; font-size: 15px; color: #5f6b78; border-top: 1px solid #242b34; padding-top: 18px; }
+  .foot a { color: #8b949f; }
+  .foot a:focus { outline: 3px solid #b5d96a; outline-offset: 4px; border-radius: 4px; }
+  .none { padding: 20px; border: 1px solid #3a434e; border-radius: 10px; color: #e8b04b; font-size: 18px; margin-bottom: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1a1f26"/><path d="M14 6h4v9h5l-7 8-7-8h5z" fill="#b5d96a"/><path d="M7 22v4h18v-4h-2v2H9v-2z" fill="#b5d96a"/></svg>
+    {{.Name}}
+  </div>
+  <h1>Install ATV Loader on this TV</h1>
+  <p>ATV Loader is the app that browses this store and installs apps with the remote. You only need the browser for this first step.</p>
+
+  {{if .Loader}}
+  <a class="dl" href="/atvloader.apk" download="atvloader.apk" autofocus>
+    Download ATV Loader {{.Loader.VersionName}}
+    <small>{{.Loader.SizeHuman}} · APK · sha256 {{.Loader.ShortSHA}}</small>
+  </a>
+  <ol>
+    <li>Open the download from the browser's downloads list (or a file manager) and allow this browser to install unknown apps if asked.</li>
+    <li>Open ATV Loader from the home screen and enter this address: <br><code class="addr">{{.Address}}</code></li>
+    <li>It shows a short code. Approve it on the admin page under <em>Devices</em>. From then on the app updates itself from the store.</li>
+  </ol>
+  {{else}}
+  <div class="none">This server was built without the ATV Loader APK, so there is nothing to download yet. Build it with <code>make apk</code> and rebuild the server, or start it with <code>ATVLOADER_SELF_APK=/path/to/app-release.apk</code>.</div>
+  {{end}}
+
+  <div class="foot">
+    <a href="/admin/">Admin</a>
+    <span>atvloader {{.Version}}</span>
+  </div>
+</main>
+</body>
+</html>

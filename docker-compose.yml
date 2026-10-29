@@ -1,0 +1,19 @@
+# Minimal homelab deployment. Put nginx + oauth2-proxy in front; see deploy/nginx.conf.
+services:
+  atvloader:
+    build:
+      context: ./server
+    image: atvloader-server:latest
+    container_name: atvloader
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      ATVLOADER_NAME: "Homelab apps"
+      # Header oauth2-proxy sets for the signed-in user (default X-Forwarded-User).
+      ATVLOADER_TRUSTED_HEADER: "X-Forwarded-User"
+      # Reject admin requests that did not come through the proxy. Turn on once nginx is in place.
+      ATVLOADER_REQUIRE_TRUSTED_HEADER: "false"
+      ATVLOADER_MAX_UPLOAD_MB: "2048"

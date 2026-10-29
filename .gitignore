@@ -1,0 +1,4 @@
+/data/
+*.apk
+!tv/app/src/main/**/*.apk
+dist/
