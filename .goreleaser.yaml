@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+#
+# Builds the server and packages it as a .deb (binary + systemd unit +
+# /etc/atvloader/env). The Go module lives in ./server; the TV app is not
+# built here. Stage it first with `make apk` so it gets embedded.
+#
+#   make snapshot   goreleaser release --snapshot --clean  (no tag, nothing published)
+#   make release    goreleaser release --clean             (tagged, publishes to Gitea)
+version: 2
+
+project_name: atvloader
+
+before:
+  hooks:
+    # Refuse to cut a server without the loader APK: TVs update the app from
+    # this binary, so a release without it would silently drop self-update.
+    - >-
+      sh -c 'test -f server/self/atvloader.apk ||
+      { echo "server/self/atvloader.apk missing, run make apk first" >&2; exit 1; }'
+    - go -C server mod tidy
+    - go -C server test ./...
+
+builds:
+  - id: atvloader-server
+    dir: server
+    main: .
+    binary: atvloader-server
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - deploy/nginx.conf
+      - docker-compose.yml
+      - src: packaging/atvloader.service
+        dst: systemd/atvloader.service
+      - src: packaging/env
+        dst: env
+
+nfpms:
+  - id: atvloader
+    package_name: atvloader
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+    vendor: ophymx
+    homepage: https://git.home.ophymx.com/ophymx/atvloader
+    maintainer: Jeffrey T. Peckham <abic@ophymx.com>
+    description: |
+      Private Android TV app store: APK catalog, device API and admin UI.
+      Runs behind nginx + oauth2-proxy; the admin side trusts the identity
+      header the proxy sets.
+    license: MIT
+    formats: [deb]
+    bindir: /usr/bin
+    section: web
+    priority: optional
+    # /usr/bin + /lib/systemd/system so this deb agrees with whatever the
+    # internal apt repo later builds from the same tree.
+    contents:
+      - src: packaging/atvloader.service
+        dst: /lib/systemd/system/atvloader.service
+        file_info:
+          mode: 0644
+      - src: packaging/env
+        dst: /etc/atvloader/env
+        type: config|noreplace
+        file_info:
+          mode: 0640
+      - src: deploy/nginx.conf
+        dst: /usr/share/doc/atvloader/nginx.conf.example
+        file_info:
+          mode: 0644
+      - dst: /var/lib/atvloader
+        type: dir
+        file_info:
+          mode: 0750
+    scripts:
+      preinstall: packaging/preinstall.sh
+      postinstall: packaging/postinstall.sh
+      preremove: packaging/preremove.sh
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next+{{ .ShortCommit }}"
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  # Gitea release; set GITEA_TOKEN in the environment when running
+  # `goreleaser release`.
+  gitea:
+    owner: ophymx
+    name: atvloader
+
+gitea_urls:
+  api: https://git.home.ophymx.com/api/v1
+  download: https://git.home.ophymx.com

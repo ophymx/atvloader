@@ -3,11 +3,13 @@
 #   make server   build the server binary with the staged APK embedded
 #   make docker   build the Docker image (expects `make apk` first, or an APK in server/self/)
 #   make run      run the server locally against ./data
+#   make snapshot untagged goreleaser build: dist/ gets tarballs + .deb for amd64/arm64
+#   make release  tagged goreleaser build, published to Gitea (needs GITEA_TOKEN)
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 APK = tv/app/build/outputs/apk/release/app-release.apk
 
-.PHONY: apk server docker run assets clean
+.PHONY: apk server docker snapshot release check run assets clean
 
 apk:
 	cd tv && ./gradlew assembleRelease
@@ -18,6 +20,18 @@ server:
 
 docker:
 	docker compose build --build-arg VERSION=$(VERSION)
+
+# goreleaser drives .goreleaser.yaml: builds server/ for amd64+arm64 and
+# packages the .deb with the systemd unit. Both expect the APK staged by
+# `make apk` (the before-hook refuses to build without it).
+snapshot:
+	goreleaser release --snapshot --clean
+
+release:
+	goreleaser release --clean
+
+check:
+	goreleaser check
 
 run: server
 	./dist/atvloader-server -data ./data

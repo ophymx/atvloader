@@ -1,0 +1,9 @@
+# atvloader.service environment. Loopback by default: the admin UI
+# trusts ATVLOADER_TRUSTED_HEADER, so only a reverse proxy that sets it
+# (nginx + oauth2-proxy, see deploy/nginx.conf) should reach this port.
+ATVLOADER_ADDR=127.0.0.1:8080
+ATVLOADER_DATA=/var/lib/atvloader
+ATVLOADER_NAME=Homelab apps
+ATVLOADER_TRUSTED_HEADER=X-Forwarded-User
+ATVLOADER_REQUIRE_TRUSTED_HEADER=true
+ATVLOADER_MAX_UPLOAD_MB=2048

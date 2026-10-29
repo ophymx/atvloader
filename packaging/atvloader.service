@@ -1,0 +1,38 @@
+[Unit]
+Description=atvloader — private Android TV app store
+Documentation=https://git.home.ophymx.com/ophymx/atvloader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=atvloader
+Group=atvloader
+EnvironmentFile=/etc/atvloader/env
+ExecStart=/usr/bin/atvloader-server
+Restart=on-failure
+RestartSec=3s
+
+# Hardening. APKs, icons and the index live in /var/lib/atvloader;
+# nothing else is written.
+StateDirectory=atvloader
+StateDirectoryMode=0750
+ConfigurationDirectory=atvloader
+ReadWritePaths=/var/lib/atvloader
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

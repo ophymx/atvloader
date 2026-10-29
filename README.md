@@ -39,6 +39,18 @@ make run        # serve ./data on :8080
 make apk && docker compose up -d --build
 ```
 
+### Debian package
+
+[GoReleaser](https://goreleaser.com) (`.goreleaser.yaml`) builds the server for amd64 and arm64 and packages it as a `.deb` with a systemd unit, an `atvloader` system user and `/etc/atvloader/env` (loopback listen, `/var/lib/atvloader` data dir, identity header required). Stage the APK first; the build refuses to run without it.
+
+```sh
+make apk
+make snapshot   # untagged: dist/atvloader_<ver>_{amd64,arm64}.deb + tarballs
+make release    # on a v* tag: same, published as a Gitea release (needs GITEA_TOKEN)
+```
+
+Install with `dpkg -i`, then `systemctl start atvloader` and put nginx + oauth2-proxy in front (`/usr/share/doc/atvloader/nginx.conf.example`).
+
 | Setting | Env var | Default |
 | --- | --- | --- |
 | Listen address | `ATVLOADER_ADDR` | `:8080` |
