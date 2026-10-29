@@ -4,6 +4,7 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"log/slog"
 
 	"github.com/shogo82148/androidbinary"
 	"github.com/shogo82148/androidbinary/apk"
@@ -57,5 +58,20 @@ func parseAPK(path string) (*apkMeta, error) {
 			break
 		}
 	}
+	if meta.Icon == nil {
+		// No raster at all: the icon is an <adaptive-icon> or <vector> XML
+		// (API 26+ apps often ship nothing else). Render it ourselves.
+		cfg := &androidbinary.ResTableConfig{SDKVersion: 34, Density: 640}
+		if iconPath, err := m.App.Icon.WithResTableConfig(cfg).String(); err == nil && !androidbinary.IsResID(iconPath) {
+			img, err := renderIconFile(path, iconPath, iconSize)
+			if err != nil {
+				slog.Debug("render xml icon", "apk", path, "icon", iconPath, "err", err)
+			}
+			meta.Icon = img
+		}
+	}
 	return meta, nil
 }
+
+// iconSize is the edge of icons rendered from XML drawables.
+const iconSize = 256
