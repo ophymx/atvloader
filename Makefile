@@ -11,8 +11,10 @@ APK = tv/app/build/outputs/apk/release/app-release.apk
 
 .PHONY: apk server docker snapshot release check run assets clean
 
+# APK version follows git (tools/version.sh): versionName from `git describe`,
+# versionCode from the nearest v* tag.
 apk:
-	cd tv && ./gradlew assembleRelease
+	cd tv && ATVLOADER_VERSION_NAME=$$(../tools/version.sh | sed -n 1p) ATVLOADER_VERSION_CODE=$$(../tools/version.sh | sed -n 2p) ./gradlew assembleRelease
 	cp $(APK) server/self/atvloader.apk
 
 server:

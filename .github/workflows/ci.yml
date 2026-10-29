@@ -1,0 +1,57 @@
+name: CI
+
+# Every push and PR: build the TV app (debug-signed when the keystore
+# secrets are absent, as on forks), embed it, test and snapshot-package the
+# server. Artifacts are kept for a week for manual testing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platforms;android-37.2 build-tools;37.0.0 platform-tools
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build TV app
+        run: make apk
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+
+      - name: Vet
+        run: go -C server vet ./...
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: atvloader-snapshot
+          retention-days: 7
+          path: |
+            server/self/atvloader.apk
+            dist/*.deb
+            dist/*.tar.gz
+            dist/checksums.txt

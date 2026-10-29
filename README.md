@@ -109,16 +109,38 @@ Data on disk is plain: `data/store.json`, `data/apks/<pkg>-<versionCode>.apk`, `
 Needs JDK 17+ and the Android SDK (`tv/local.properties` → `sdk.dir`).
 
 ```sh
-cd tv
-./gradlew assembleRelease
-# → app/build/outputs/apk/release/app-release.apk
+make apk
+# → tv/app/build/outputs/apk/release/app-release.apk, copied to server/self/atvloader.apk
 ```
+
+`make apk` derives the version from git (`tools/version.sh`): `versionName` is `git describe` without the `v`, `versionCode` is `major*1000000 + minor*1000 + patch` of the nearest `v*` tag. Android only installs updates with a higher `versionCode`, so new TV builds mean a new tag. Running `./gradlew assembleRelease` directly produces `0.0.0-dev` / code 1.
 
 Release signing reads `tv/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`); without it the APK is signed with the debug key. **Keep the same key forever**: Android refuses to update an app signed with a different key, so losing the keystore means uninstalling ATV Loader from every TV. Create one with:
 
 ```sh
 keytool -genkeypair -v -keystore tv/keystore/release.jks -alias atvloader \
   -keyalg RSA -keysize 2048 -validity 10000
+```
+
+## Releases
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`: it builds the signed APK, embeds it in the server, and publishes a GitHub release with `atvloader_<ver>_{amd64,arm64}.deb`, the tarballs, `atvloader_<ver>.apk` and `checksums.txt`. Every push to `main` and every PR runs `ci.yml`, which does the same as a snapshot (debug-signed APK when the secrets are absent) and keeps the output as a workflow artifact for a week.
+
+The release job refuses to run without the signing key. Add these repository secrets once:
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_B64` | `base64 -w0 tv/keystore/release.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | `storePassword` from `tv/keystore.properties` |
+| `ANDROID_KEY_ALIAS` | `keyAlias` (`atvloader`) |
+| `ANDROID_KEY_PASSWORD` | `keyPassword` |
+
+```sh
+gh secret set ANDROID_KEYSTORE_B64 --body "$(base64 -w0 tv/keystore/release.jks)"
+gh secret set ANDROID_KEYSTORE_PASSWORD --body "$(sed -n 's/^storePassword=//p' tv/keystore.properties)"
+gh secret set ANDROID_KEY_ALIAS        --body "$(sed -n 's/^keyAlias=//p' tv/keystore.properties)"
+gh secret set ANDROID_KEY_PASSWORD     --body "$(sed -n 's/^keyPassword=//p' tv/keystore.properties)"
+git tag v0.1.0 && git push origin v0.1.0
 ```
 
 ## Install it on a TV

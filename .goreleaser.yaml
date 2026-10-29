@@ -92,6 +92,9 @@ nfpms:
 
 checksum:
   name_template: checksums.txt
+  extra_files:
+    - glob: server/self/atvloader.apk
+      name_template: "atvloader_{{ .Version }}.apk"
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next+{{ .ShortCommit }}"
@@ -113,3 +116,8 @@ release:
     name: atvloader
   draft: false
   prerelease: auto
+  # The signed TV app, for first installs from a TV browser (the server
+  # embeds the same file and serves it at /atvloader.apk).
+  extra_files:
+    - glob: server/self/atvloader.apk
+      name_template: "atvloader_{{ .Version }}.apk"

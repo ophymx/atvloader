@@ -5,6 +5,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Version comes from git via tools/version.sh (make apk, CI) through these
+// env vars; the fallbacks only apply to builds run straight from Gradle.
+val versionNameEnv = providers.environmentVariable("ATVLOADER_VERSION_NAME").orNull
+val versionCodeEnv = providers.environmentVariable("ATVLOADER_VERSION_CODE").orNull?.toIntOrNull()
+
 // Release signing: tv/keystore.properties (gitignored). Falls back to the
 // debug key so `assembleRelease` always produces an installable APK.
 val keystoreProps = Properties().apply {
@@ -21,8 +26,8 @@ android {
         applicationId = "com.ophymx.atvloader"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = versionCodeEnv?.takeIf { it > 0 } ?: 1
+        versionName = versionNameEnv ?: "0.0.0-dev"
     }
 
     signingConfigs {

@@ -1,0 +1,72 @@
+name: Release
+
+# Tag v* → build the signed TV app, embed it in the server, publish a GitHub
+# release with the .deb/.tar.gz for amd64+arm64 and the APK.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # goreleaser changelog and tools/version.sh need tags
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platforms;android-37.2 build-tools;37.0.0 platform-tools
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Install release keystore
+        # Updates only install over the same signing key, so a release must
+        # never fall back to the debug key: fail loudly if the secret is unset.
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "ANDROID_KEYSTORE_* secrets are not set; refusing to release a debug-signed APK" >&2
+            exit 1
+          fi
+          mkdir -p tv/keystore
+          echo "$KEYSTORE_B64" | base64 -d > tv/keystore/release.jks
+          cat > tv/keystore.properties <<EOF
+          storeFile=keystore/release.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Build TV app
+        run: make apk
+
+      - name: Verify APK signature and version
+        run: |
+          BT="$ANDROID_HOME/build-tools/37.0.0"
+          "$BT/apksigner" verify --print-certs server/self/atvloader.apk
+          "$BT/aapt2" dump badging server/self/atvloader.apk | grep '^package:'
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
