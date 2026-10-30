@@ -524,9 +524,22 @@ func scaleSquare(src image.Image, size int) image.Image {
 	return dst
 }
 
+// maxDrawableDepth bounds how far drawable references are followed while
+// rendering an icon. Compiled drawables can reference one another, and a
+// malicious or broken APK can make them reference each other in a cycle
+// (A → B → A) or themselves. Without a bound the render recurses until the
+// goroutine stack overflows, which is a fatal runtime error that net/http's
+// per-request recover cannot catch, so it would crash the whole server.
+const maxDrawableDepth = 16
+
+var errDrawableTooDeep = errors.New("drawable nesting too deep (reference cycle?)")
+
 // renderDrawableFile renders a drawable zip entry (compiled XML or bitmap)
 // to a size×size image.
-func (r *apkRes) renderDrawableFile(path string, size int) (image.Image, error) {
+func (r *apkRes) renderDrawableFile(path string, size, depth int) (image.Image, error) {
+	if depth > maxDrawableDepth {
+		return nil, errDrawableTooDeep
+	}
 	data, err := r.read(path)
 	if err != nil {
 		return nil, err
@@ -536,7 +549,7 @@ func (r *apkRes) renderDrawableFile(path string, size int) (image.Image, error) 
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
-		return r.renderNode(n, size)
+		return r.renderNode(n, size, depth)
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -547,7 +560,7 @@ func (r *apkRes) renderDrawableFile(path string, size int) (image.Image, error) 
 
 // renderDrawableRef renders a reference held in an attribute: a colour, or
 // a resource ID pointing at a colour or a drawable file.
-func (r *apkRes) renderDrawableRef(a *xmlAttr, size int) (image.Image, error) {
+func (r *apkRes) renderDrawableRef(a *xmlAttr, size, depth int) (image.Image, error) {
 	if c, ok := typedColor(a.Type, a.Data); ok {
 		return solid(c, size), nil
 	}
@@ -565,21 +578,24 @@ func (r *apkRes) renderDrawableRef(a *xmlAttr, size int) (image.Image, error) {
 	case uint32:
 		return solid(argb(v), size), nil
 	case string:
-		return r.renderDrawableFile(v, size)
+		return r.renderDrawableFile(v, size, depth+1)
 	}
 	return nil, fmt.Errorf("unsupported drawable resource 0x%08x", a.Data)
 }
 
 // renderNode renders a compiled drawable document.
-func (r *apkRes) renderNode(n *xmlNode, size int) (image.Image, error) {
+func (r *apkRes) renderNode(n *xmlNode, size, depth int) (image.Image, error) {
+	if depth > maxDrawableDepth {
+		return nil, errDrawableTooDeep
+	}
 	switch n.Name {
 	case "vector":
 		return r.renderVector(n, size)
 	case "adaptive-icon":
-		return r.renderAdaptive(n, size)
+		return r.renderAdaptive(n, size, depth)
 	case "bitmap":
 		if a := n.attr("src"); a != nil {
-			return r.renderDrawableRef(a, size)
+			return r.renderDrawableRef(a, size, depth)
 		}
 	case "inset", "layer-list":
 		// Best effort: draw the layers (or the single wrapped drawable) full
@@ -588,19 +604,19 @@ func (r *apkRes) renderNode(n *xmlNode, size int) (image.Image, error) {
 		drawn := 0
 		for _, c := range n.Children {
 			if a := c.attr("drawable"); a != nil {
-				if img, err := r.renderDrawableRef(a, size); err == nil {
+				if img, err := r.renderDrawableRef(a, size, depth); err == nil {
 					draw.Draw(canvas, canvas.Bounds(), img, image.Point{}, draw.Over)
 					drawn++
 				}
 			} else if len(c.Children) > 0 {
-				if img, err := r.renderNode(c.Children[0], size); err == nil {
+				if img, err := r.renderNode(c.Children[0], size, depth+1); err == nil {
 					draw.Draw(canvas, canvas.Bounds(), img, image.Point{}, draw.Over)
 					drawn++
 				}
 			}
 		}
 		if a := n.attr("drawable"); a != nil {
-			if img, err := r.renderDrawableRef(a, size); err == nil {
+			if img, err := r.renderDrawableRef(a, size, depth); err == nil {
 				draw.Draw(canvas, canvas.Bounds(), img, image.Point{}, draw.Over)
 				drawn++
 			}
@@ -615,7 +631,7 @@ func (r *apkRes) renderNode(n *xmlNode, size int) (image.Image, error) {
 // renderAdaptive composites an <adaptive-icon>: both layers fill a 108dp
 // canvas, the launcher shows the centre 72dp through its mask. The output
 // is size×size with a rounded-square mask applied.
-func (r *apkRes) renderAdaptive(n *xmlNode, size int) (image.Image, error) {
+func (r *apkRes) renderAdaptive(n *xmlNode, size, depth int) (image.Image, error) {
 	full := size * 108 / 72
 	canvas := image.NewNRGBA(image.Rect(0, 0, full, full))
 	drawn := 0
@@ -628,9 +644,9 @@ func (r *apkRes) renderAdaptive(n *xmlNode, size int) (image.Image, error) {
 		var img image.Image
 		var err error
 		if a := layer.attr("drawable"); a != nil {
-			img, err = r.renderDrawableRef(a, full)
+			img, err = r.renderDrawableRef(a, full, depth)
 		} else if len(layer.Children) > 0 {
-			img, err = r.renderNode(layer.Children[0], full)
+			img, err = r.renderNode(layer.Children[0], full, depth+1)
 		} else {
 			continue
 		}
@@ -682,5 +698,5 @@ func renderIconFile(apkPath, iconPath string, size int) (image.Image, error) {
 		return nil, err
 	}
 	defer res.Close()
-	return res.renderDrawableFile(iconPath, size)
+	return res.renderDrawableFile(iconPath, size, 0)
 }

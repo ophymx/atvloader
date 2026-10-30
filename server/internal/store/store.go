@@ -332,7 +332,7 @@ func (s *Store) SetIcon(pkg string, r io.Reader) (*App, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	rel := "icons/" + pkg + ".png"
+	rel := "icons/" + safeName.ReplaceAllString(pkg, "_") + ".png"
 	f, err := os.Create(s.Abs(rel))
 	if err != nil {
 		return nil, err
@@ -347,6 +347,12 @@ func (s *Store) SetIcon(pkg string, r io.Reader) (*App, error) {
 }
 
 var safeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+
+// validPackage matches the Android application-id grammar: two or more
+// dot-separated segments, each starting with a letter. Enforcing it at import
+// keeps malformed names (path separators, empty strings, "..") out of the
+// index, the JSON URLs and the file paths derived from the package.
+var validPackage = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$`)
 
 // ImportResult describes what an upload did.
 type ImportResult struct {
@@ -393,6 +399,9 @@ func (s *Store) ImportAPK(r io.Reader, opts ...ImportOptions) (*ImportResult, er
 	meta, err := parseAPK(tmpName)
 	if err != nil {
 		return nil, fmt.Errorf("not a readable APK: %w", err)
+	}
+	if !validPackage.MatchString(meta.Package) {
+		return nil, fmt.Errorf("invalid package name %q", meta.Package)
 	}
 	if o.Allow != nil {
 		if err := o.Allow(meta.Package); err != nil {
