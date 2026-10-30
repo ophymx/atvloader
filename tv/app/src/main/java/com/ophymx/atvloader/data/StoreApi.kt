@@ -33,6 +33,9 @@ class StoreApi(private val prefs: Prefs) {
 
     fun url(path: String): String = prefs.serverUrl.trimEnd('/') + path
 
+    /** A sentence for the screen about [e], naming this server. */
+    fun describe(e: Throwable): String = describeError(e, prefs.serverUrl)
+
     private inline fun <reified T> get(path: String): T = run(Request.Builder().url(url(path)).get().build())
 
     private inline fun <reified T> post(path: String, body: Any): T =

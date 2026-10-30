@@ -1,6 +1,7 @@
 package com.ophymx.atvloader.ui
 
 import android.app.Application
+import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,6 +13,7 @@ import com.ophymx.atvloader.data.Prefs
 import com.ophymx.atvloader.data.ServerInfo
 import com.ophymx.atvloader.data.StoreApi
 import com.ophymx.atvloader.data.UnauthorizedException
+import com.ophymx.atvloader.data.describeError
 import com.ophymx.atvloader.install.InstallState
 import com.ophymx.atvloader.install.Installer
 import kotlinx.coroutines.Job
@@ -32,6 +34,14 @@ class StoreViewModel(app: Application) : AndroidViewModel(app) {
     val prefs = Prefs(app)
     val api = StoreApi(prefs)
     val selfPackage: String = app.packageName
+
+    /** This build, for the settings screen: "0.1.0 (1000)". */
+    val selfVersion: String = runCatching {
+        val pi = app.packageManager.getPackageInfo(app.packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong()
+        "${pi.versionName} ($code)"
+    }.getOrDefault("unknown")
+    val deviceModel: String = listOf(Build.MANUFACTURER, Build.MODEL).filter { it.isNotBlank() }.distinct().joinToString(" ")
 
     var screen by mutableStateOf<Screen>(if (prefs.serverUrl.isBlank()) Screen.Setup else if (prefs.deviceToken == null) Screen.Pairing else Screen.Browse)
         private set
@@ -110,7 +120,7 @@ class StoreViewModel(app: Application) : AndroidViewModel(app) {
                     screen = Screen.Pairing; startPairing()
                 }
             } catch (e: Exception) {
-                setupError = "Could not reach $u: ${e.message ?: e.javaClass.simpleName}"
+                setupError = if (e is IllegalStateException) e.message else describeError(e, u)
             } finally {
                 setupBusy = false
             }
@@ -144,7 +154,7 @@ class StoreViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 pairingError = "This code expired. Request a new one."
             } catch (e: Exception) {
-                pairingError = "Could not start pairing: ${e.message ?: e.javaClass.simpleName}"
+                pairingError = "Could not start pairing. ${api.describe(e)}"
             }
         }
     }
@@ -182,7 +192,7 @@ class StoreViewModel(app: Application) : AndroidViewModel(app) {
                 screen = Screen.Pairing
                 startPairing()
             } catch (e: Exception) {
-                error = "Could not load the catalog: ${e.message ?: e.javaClass.simpleName}"
+                error = api.describe(e)
             } finally {
                 loading = false
             }

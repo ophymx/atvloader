@@ -74,7 +74,7 @@ object Installer {
         } catch (e: Exception) {
             Log.w(TAG, "install $pkg failed", e)
             file.delete()
-            set(pkg, InstallState.Failed(e.message ?: e.javaClass.simpleName))
+            set(pkg, InstallState.Failed(api.describe(e)))
         }
     }
 

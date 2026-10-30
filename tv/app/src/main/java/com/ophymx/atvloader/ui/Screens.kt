@@ -146,8 +146,36 @@ fun BrowseScreen(vm: StoreViewModel, imageLoader: ImageLoader) {
             OutlinedButton(onClick = { vm.goTo(Screen.Settings) }) { Text("Settings") }
         }
 
-        vm.error?.let {
-            Text(it, color = Coral, modifier = Modifier.padding(horizontal = Gutter, vertical = 8.dp))
+        val error = vm.error
+        if (error != null && shelves.isEmpty() && !vm.loading) {
+            // Nothing to show and the last load failed: make the problem the screen.
+            val retry = remember { FocusRequester() }
+            LaunchedEffect(error) { runCatching { retry.requestFocus() } }
+            Column(Modifier.fillMaxSize().padding(Gutter), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Can't reach the store", style = MaterialTheme.typography.headlineSmall, color = Fog)
+                Spacer(Modifier.height(8.dp))
+                Text(error, color = Mist, fontSize = 17.sp)
+                Spacer(Modifier.height(24.dp))
+                Row {
+                    Button(onClick = { vm.refresh() }, modifier = Modifier.focusRequester(retry)) { Text("Try again") }
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(onClick = { vm.goTo(Screen.Settings) }) { Text("Settings") }
+                }
+            }
+            return
+        }
+        if (error != null) {
+            // The shelves below are the last catalog we got; say so and offer a retry.
+            Row(
+                Modifier.padding(horizontal = Gutter, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(Panel).padding(horizontal = 20.dp, vertical = 12.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Couldn't refresh; showing the last catalog", color = Fog, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Text(error, color = Mist, fontSize = 14.sp)
+                }
+                OutlinedButton(onClick = { vm.refresh() }) { Text("Try again") }
+            }
         }
 
         vm.selfUpdate?.let { self -> SelfUpdateBanner(vm, self) }
@@ -157,6 +185,8 @@ fun BrowseScreen(vm: StoreViewModel, imageLoader: ImageLoader) {
                 Text("Nothing here yet", style = MaterialTheme.typography.headlineSmall, color = Fog)
                 Spacer(Modifier.height(8.dp))
                 Text("Upload an APK from the admin page and it will show up here.", color = Mist)
+                Spacer(Modifier.height(24.dp))
+                OutlinedButton(onClick = { vm.refresh() }) { Text("Refresh") }
             }
             return
         }
@@ -389,6 +419,15 @@ fun SettingsScreen(vm: StoreViewModel) {
         Spacer(Modifier.height(20.dp))
         Text("This TV", color = Mist, fontSize = 14.sp)
         Text(vm.prefs.deviceName.ifBlank { "Linked" }, color = Fog, fontSize = 18.sp)
+        Text("${vm.deviceModel} · Android ${android.os.Build.VERSION.RELEASE}", color = Mist, fontSize = 14.sp)
+        Spacer(Modifier.height(20.dp))
+        Text("ATV Loader", color = Mist, fontSize = 14.sp)
+        Text(vm.selfVersion, color = Fog, fontSize = 18.sp)
+        Text(
+            vm.selfUpdate?.latest?.let { "Version ${it.versionName} is in the store; update from the banner on the main screen." }
+                ?: "Updates arrive through the store like any other app.",
+            color = Mist, fontSize = 14.sp,
+        )
         Spacer(Modifier.height(32.dp))
         Row {
             Button(onClick = { vm.changeServer() }, modifier = Modifier.focusRequester(fr)) { Text("Change server") }
