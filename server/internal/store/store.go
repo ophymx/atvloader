@@ -71,9 +71,10 @@ func (a *App) clone() *App {
 }
 
 type index struct {
-	Apps       map[string]*App    `json:"apps"`
-	Categories []string           `json:"categories"`
-	Devices    map[string]*Device `json:"devices"`
+	Apps       map[string]*App      `json:"apps"`
+	Categories []string             `json:"categories"`
+	Devices    map[string]*Device   `json:"devices"`
+	Tokens     map[string]*APIToken `json:"tokens,omitempty"`
 }
 
 // Store is safe for concurrent use.
@@ -109,6 +110,9 @@ func Open(dir string) (*Store, error) {
 	}
 	if s.idx.Devices == nil {
 		s.idx.Devices = map[string]*Device{}
+	}
+	if s.idx.Tokens == nil {
+		s.idx.Tokens = map[string]*APIToken{}
 	}
 	for _, a := range s.idx.Apps {
 		sortVersions(a)
@@ -354,6 +358,9 @@ type ImportOptions struct {
 	Name        string // name to use when the app is new (default: APK label)
 	Description string // description to use when the app is new
 	SkipSameSHA bool   // if an identical file is already stored, do nothing
+	// Allow, if set, is consulted with the APK's package name before anything
+	// is stored; a non-nil error aborts the import and is returned as-is.
+	Allow func(pkg string) error
 }
 
 // ImportAPK reads an APK from r, extracts its metadata, and files it.
@@ -378,6 +385,11 @@ func (s *Store) ImportAPK(r io.Reader, opts ...ImportOptions) (*ImportResult, er
 	meta, err := parseAPK(tmpName)
 	if err != nil {
 		return nil, fmt.Errorf("not a readable APK: %w", err)
+	}
+	if o.Allow != nil {
+		if err := o.Allow(meta.Package); err != nil {
+			return nil, err
+		}
 	}
 
 	s.mu.Lock()

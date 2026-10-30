@@ -41,11 +41,13 @@
     $$('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === name));
     $('#page-apps').hidden = name !== 'apps';
     $('#page-devices').hidden = name !== 'devices';
+    $('#page-tokens').hidden = name !== 'tokens';
     if (name === 'devices') { loadDevices(); $('#pair-code').focus(); }
+    if (name === 'tokens') loadTokens();
   }
   window.addEventListener('hashchange', route);
   function route() {
-    showTab(location.hash === '#devices' ? 'devices' : 'apps');
+    showTab(location.hash === '#devices' ? 'devices' : location.hash === '#tokens' ? 'tokens' : 'apps');
     const m = location.hash.match(/^#app\/(.+)$/);
     if (m && m[1] !== state.sel) select(decodeURIComponent(m[1]));
   }
@@ -291,6 +293,61 @@
     let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
     e.target.value = v.length > 3 ? `${v.slice(0, 3)}-${v.slice(3)}` : v;
   };
+
+  // ---------- API tokens
+  const scopeLabel = { read: 'Read', publish: 'Publish', manage: 'Manage', devices: 'Devices' };
+  async function loadTokens() {
+    try {
+      const r = await api('/admin/tokens');
+      state.tokens = r.tokens;
+      renderTokens();
+    } catch (e) { toast(`Could not load tokens: ${e.message}`, true); }
+  }
+  function renderTokens() {
+    const toks = state.tokens || [];
+    $('#tokens-empty').hidden = toks.length > 0;
+    $('#tokens').innerHTML = toks.map(t => `<tr data-id="${esc(t.id)}" class="${t.expired ? 'hid' : ''}">
+      <td><div class="name">${esc(t.name)}</div><div class="dim">${ago(t.createdAt)}${t.createdBy && t.createdBy !== 'anonymous' ? ` by ${esc(t.createdBy)}` : ''}</div></td>
+      <td class="mono">${esc(t.prefix)}…</td>
+      <td>${t.scopes.map(sc => `<span class="tag">${esc(scopeLabel[sc] || sc)}</span>`).join('')}</td>
+      <td class="mono">${t.packages.length ? t.packages.map(esc).join('<br>') : '<span class="dim">any</span>'}</td>
+      <td>${t.lastUsed ? ago(t.lastUsed) : '<span class="dim">never</span>'}</td>
+      <td>${t.expiresAt ? (t.expired ? '<span class="tag red">Expired</span>' : new Date(t.expiresAt).toLocaleDateString()) : '<span class="dim">never</span>'}</td>
+      <td style="text-align:right"><button class="ghost red revoke">Revoke</button></td></tr>`).join('');
+    $$('#tokens tr').forEach(tr => {
+      $('.revoke', tr).onclick = async () => {
+        const t = toks.find(x => x.id === tr.dataset.id);
+        if (!confirm(`Revoke "${t.name}"? Anything using it stops working immediately.`)) return;
+        try { await api(`/admin/tokens/${t.id}`, { method: 'DELETE' }); toast('Token revoked'); loadTokens(); } catch (e) { toast(e.message, true); }
+      };
+    });
+    $('#tok-usage').textContent = `curl -H "Authorization: Bearer $ATVLOADER_TOKEN" \\\n  -F apk=@app-release.apk ${location.origin}${API}/admin/apps`;
+  }
+  $('#tok-form').onsubmit = async e => {
+    e.preventDefault();
+    const scopes = $$('#tok-form input[name=scope]:checked').map(i => i.value);
+    if (!scopes.length) { toast('Pick at least one scope', true); return; }
+    const body = {
+      name: $('#tok-name').value, scopes,
+      packages: $('#tok-pkgs').value.split(/[\n,; ]+/).map(x => x.trim()).filter(Boolean),
+      expiresDays: Number($('#tok-exp').value),
+    };
+    try {
+      const r = await api('/admin/tokens', { method: 'POST', body: JSON.stringify(body) });
+      $('#tok-secret').value = r.secret;
+      $('#tok-dialog').showModal();
+      $('#tok-secret').select();
+      $('#tok-name').value = ''; $('#tok-pkgs').value = '';
+      loadTokens();
+    } catch (err) { toast(err.message, true); }
+  };
+  $('#tok-copy').onclick = async () => {
+    const v = $('#tok-secret').value;
+    try { await navigator.clipboard.writeText(v); $('#tok-copy').textContent = 'Copied'; }
+    catch { $('#tok-secret').select(); document.execCommand('copy'); $('#tok-copy').textContent = 'Copied'; }
+    setTimeout(() => $('#tok-copy').textContent = 'Copy', 1500);
+  };
+  $('#tok-dialog').onclose = () => { $('#tok-secret').value = ''; };
 
   // ---------- boot
   api('/admin/me').then(me => {

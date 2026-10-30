@@ -91,6 +91,8 @@ Admin (behind the proxy):
 | `GET /api/v1/admin/me` | who the proxy says you are |
 | `GET /api/v1/admin/apps` | every app including hidden ones |
 | `POST /api/v1/admin/apps` multipart `apk=@file` | import; package, version, label and icon are read from the APK |
+| `GET /api/v1/admin/apps/{pkg}` | one app with all versions |
+| `GET /api/v1/admin/tokens`, `POST /api/v1/admin/tokens`, `DELETE /api/v1/admin/tokens/{id}` | API tokens (signed-in admins only); `POST` takes `{name, scopes[], packages[], expiresDays}` and returns the secret once |
 | `PATCH /api/v1/admin/apps/{pkg}` `{name, description, category, featured, hidden}` | edit |
 | `DELETE /api/v1/admin/apps/{pkg}` | remove app and files |
 | `POST /api/v1/admin/apps/{pkg}/icon` multipart `icon=@png` | replace icon |
@@ -120,6 +122,37 @@ Release signing reads `tv/keystore.properties` (`storeFile`, `storePassword`, `k
 ```sh
 keytool -genkeypair -v -keystore tv/keystore/release.jks -alias atvloader \
   -keyalg RSA -keysize 2048 -validity 10000
+```
+
+## API tokens for automation
+
+Signed-in admins can mint API tokens on the admin page (API tokens tab) for scripts and CI. A token is a bearer credential for the admin API with a fixed set of scopes and, optionally, a package allow-list. Tokens are shown once at creation, stored hashed, can expire, and can be revoked at any time. Tokens can never create or list tokens.
+
+| Scope | Allows |
+| --- | --- |
+| `publish` | `POST /api/v1/admin/apps` (upload APKs), `POST .../apps/{pkg}/icon` |
+| `read` | `GET /api/v1/admin/apps[/{pkg}]`, icon and APK downloads, categories |
+| `manage` | `PATCH`/`DELETE` apps and versions, `PUT` categories |
+| `devices` | everything under `/api/v1/admin/devices` |
+
+With a package list, `publish`, `read` and `manage` only work for those packages; an upload of any other APK is refused with 403 and nothing is stored. Listing apps returns only the allowed packages.
+
+```sh
+curl -H "Authorization: Bearer $ATVLOADER_TOKEN" -F apk=@app-release.apk https://apps.example.com/api/v1/admin/apps
+```
+
+Because tokens authenticate on their own, the reverse proxy must let requests with an `Authorization: Bearer atv_…` header through to `/api/v1/admin/` without the login redirect. With oauth2-proxy, see the `_token` location in `deploy/nginx.conf` for the nginx pattern.
+
+A GitHub Actions step that publishes a release build:
+
+```yaml
+- name: Publish to the TV store
+  env:
+    ATVLOADER_TOKEN: ${{ secrets.ATVLOADER_TOKEN }}
+  run: |
+    curl --fail-with-body -H "Authorization: Bearer $ATVLOADER_TOKEN" \
+      -F apk=@app/build/outputs/apk/release/app-release.apk \
+      https://apps.example.com/api/v1/admin/apps
 ```
 
 ## Releases

@@ -62,27 +62,32 @@ func New(cfg Config) *Server {
 	m.Handle("GET /api/v1/apps/{pkg}/icon", s.device(s.icon))
 	m.Handle("GET /api/v1/apps/{pkg}/versions/{code}/download", s.device(s.download))
 
-	// Admin: behind the reverse proxy's login.
+	// Admin: behind the reverse proxy's login, or an API token with the
+	// scope named here. Tokens are managed by signed-in admins only.
 	m.Handle("GET /api/v1/admin/me", s.auth(s.me))
-	m.Handle("GET /api/v1/admin/devices", s.auth(s.listDevices))
-	m.Handle("POST /api/v1/admin/devices/approve", s.auth(s.approveDevice))
-	m.Handle("POST /api/v1/admin/devices/deny", s.auth(s.denyDevice))
-	m.Handle("PATCH /api/v1/admin/devices/{id}", s.auth(s.renameDevice))
-	m.Handle("DELETE /api/v1/admin/devices/{id}", s.auth(s.revokeDevice))
-	m.Handle("GET /api/v1/admin/apps", s.auth(s.adminListApps))
-	m.Handle("GET /api/v1/admin/apps/{pkg}/icon", s.auth(s.icon))
-	m.Handle("GET /api/v1/admin/apps/{pkg}/versions/{code}/download", s.auth(s.download))
-	m.Handle("POST /api/v1/admin/apps", s.auth(s.upload))
-	m.Handle("PATCH /api/v1/admin/apps/{pkg}", s.auth(s.patchApp))
-	m.Handle("DELETE /api/v1/admin/apps/{pkg}", s.auth(s.deleteApp))
-	m.Handle("POST /api/v1/admin/apps/{pkg}/icon", s.auth(s.setIcon))
-	m.Handle("PATCH /api/v1/admin/apps/{pkg}/versions/{code}", s.auth(s.patchVersion))
-	m.Handle("DELETE /api/v1/admin/apps/{pkg}/versions/{code}", s.auth(s.deleteVersion))
-	m.Handle("GET /api/v1/admin/categories", s.auth(s.getCategories))
-	m.Handle("PUT /api/v1/admin/categories", s.auth(s.putCategories))
+	m.Handle("GET /api/v1/admin/devices", s.scoped(store.ScopeDevices, s.listDevices))
+	m.Handle("POST /api/v1/admin/devices/approve", s.scoped(store.ScopeDevices, s.approveDevice))
+	m.Handle("POST /api/v1/admin/devices/deny", s.scoped(store.ScopeDevices, s.denyDevice))
+	m.Handle("PATCH /api/v1/admin/devices/{id}", s.scoped(store.ScopeDevices, s.renameDevice))
+	m.Handle("DELETE /api/v1/admin/devices/{id}", s.scoped(store.ScopeDevices, s.revokeDevice))
+	m.Handle("GET /api/v1/admin/apps", s.scoped(store.ScopeRead, s.adminListApps))
+	m.Handle("GET /api/v1/admin/apps/{pkg}", s.scoped(store.ScopeRead, s.adminGetApp))
+	m.Handle("GET /api/v1/admin/apps/{pkg}/icon", s.scoped(store.ScopeRead, s.icon))
+	m.Handle("GET /api/v1/admin/apps/{pkg}/versions/{code}/download", s.scoped(store.ScopeRead, s.download))
+	m.Handle("POST /api/v1/admin/apps", s.scoped(store.ScopePublish, s.upload))
+	m.Handle("POST /api/v1/admin/apps/{pkg}/icon", s.scoped(store.ScopePublish, s.setIcon))
+	m.Handle("PATCH /api/v1/admin/apps/{pkg}", s.scoped(store.ScopeManage, s.patchApp))
+	m.Handle("DELETE /api/v1/admin/apps/{pkg}", s.scoped(store.ScopeManage, s.deleteApp))
+	m.Handle("PATCH /api/v1/admin/apps/{pkg}/versions/{code}", s.scoped(store.ScopeManage, s.patchVersion))
+	m.Handle("DELETE /api/v1/admin/apps/{pkg}/versions/{code}", s.scoped(store.ScopeManage, s.deleteVersion))
+	m.Handle("GET /api/v1/admin/categories", s.scoped(store.ScopeRead, s.getCategories))
+	m.Handle("PUT /api/v1/admin/categories", s.scoped(store.ScopeManage, s.putCategories))
+	m.Handle("GET /api/v1/admin/tokens", s.adminOnly(s.listTokens))
+	m.Handle("POST /api/v1/admin/tokens", s.adminOnly(s.createToken))
+	m.Handle("DELETE /api/v1/admin/tokens/{id}", s.adminOnly(s.revokeToken))
 
 	if cfg.AdminUI != nil {
-		m.Handle("GET /admin/", s.auth(http.StripPrefix("/admin/", http.FileServerFS(cfg.AdminUI)).ServeHTTP))
+		m.Handle("GET /admin/", s.adminOnly(http.StripPrefix("/admin/", http.FileServerFS(cfg.AdminUI)).ServeHTTP))
 		m.HandleFunc("GET /admin", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
 		})
@@ -116,7 +121,27 @@ type ctxKey int
 const (
 	ctxUser ctxKey = iota
 	ctxDevice
+	ctxPrincipal
 )
+
+// principal is who is calling an admin route: a person signed in through
+// the reverse proxy (Token nil, allowed everything) or an API token.
+type principal struct {
+	User  string
+	Token *store.APIToken
+}
+
+func (p principal) allows(scope, pkg string) bool {
+	if p.Token == nil {
+		return true
+	}
+	return p.Token.Allows(scope, pkg)
+}
+
+func principalOf(r *http.Request) principal {
+	p, _ := r.Context().Value(ctxPrincipal).(principal)
+	return p
+}
 
 // adminUser extracts the identity set by the reverse proxy.
 func (s *Server) adminUser(r *http.Request) string {
@@ -131,18 +156,56 @@ func (s *Server) adminUser(r *http.Request) string {
 	return ""
 }
 
-// auth guards admin routes. Authentication itself happens upstream.
+// auth guards admin routes. A bearer API token authenticates on its own;
+// otherwise the identity comes from the reverse proxy upstream.
 func (s *Server) auth(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := s.adminUser(r)
-		if user == "" && s.cfg.RequireTrustedHeader {
-			writeErr(w, http.StatusUnauthorized, "no identity header from the reverse proxy")
+		var p principal
+		if bearer := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer")); strings.HasPrefix(bearer, store.TokenPrefix) {
+			tok, ok := s.cfg.Store.AuthenticateAPIToken(bearer)
+			if !ok {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="atvloader-admin"`)
+				writeErr(w, http.StatusUnauthorized, "invalid, revoked or expired API token")
+				return
+			}
+			p = principal{User: "token:" + tok.Name, Token: tok}
+		} else {
+			user := s.adminUser(r)
+			if user == "" && s.cfg.RequireTrustedHeader {
+				writeErr(w, http.StatusUnauthorized, "no identity header from the reverse proxy")
+				return
+			}
+			if user == "" {
+				user = "anonymous"
+			}
+			p = principal{User: user}
+		}
+		ctx := context.WithValue(r.Context(), ctxUser, p.User)
+		ctx = context.WithValue(ctx, ctxPrincipal, p)
+		next(w, r.WithContext(ctx))
+	})
+}
+
+// scoped is auth plus a scope check. The {pkg} path value, when present,
+// is checked against the token's package allow-list.
+func (s *Server) scoped(scope string, next http.HandlerFunc) http.Handler {
+	return s.auth(func(w http.ResponseWriter, r *http.Request) {
+		if p := principalOf(r); !p.allows(scope, r.PathValue("pkg")) {
+			writeErr(w, http.StatusForbidden, fmt.Sprintf("this token lacks the %q scope for this request", scope))
 			return
 		}
-		if user == "" {
-			user = "anonymous"
+		next(w, r)
+	})
+}
+
+// adminOnly is auth restricted to people: API tokens are refused.
+func (s *Server) adminOnly(next http.HandlerFunc) http.Handler {
+	return s.auth(func(w http.ResponseWriter, r *http.Request) {
+		if principalOf(r).Token != nil {
+			writeErr(w, http.StatusForbidden, "API tokens cannot do this; sign in to the admin UI")
+			return
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), ctxUser, user)))
+		next(w, r)
 	})
 }
 
@@ -306,11 +369,24 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminListApps(w http.ResponseWriter, r *http.Request) {
 	apps := s.cfg.Store.List()
+	p := principalOf(r)
 	out := make([]*appJSON, 0, len(apps))
 	for _, a := range apps {
+		if !p.allows(store.ScopeRead, a.Package) {
+			continue // package-restricted token: only its own apps
+		}
 		out = append(out, toApp(a, true, true))
 	}
 	writeJSON(w, 200, map[string]any{"apps": out, "categories": s.cfg.Store.Categories()})
+}
+
+func (s *Server) adminGetApp(w http.ResponseWriter, r *http.Request) {
+	a, err := s.cfg.Store.Get(r.PathValue("pkg"))
+	if err != nil {
+		writeErr(w, 404, "app not found")
+		return
+	}
+	writeJSON(w, 200, toApp(a, true, true))
 }
 
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
@@ -320,6 +396,13 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "expected multipart/form-data with an 'apk' file: "+err.Error())
 		return
 	}
+	p := principalOf(r)
+	opts := store.ImportOptions{Allow: func(pkg string) error {
+		if !p.allows(store.ScopePublish, pkg) {
+			return fmt.Errorf("%w: this token may not publish %s", store.ErrForbidden, pkg)
+		}
+		return nil
+	}}
 	var results []*store.ImportResult
 	for {
 		part, err := mr.NextPart()
@@ -330,13 +413,17 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 			part.Close()
 			continue
 		}
-		res, err := s.cfg.Store.ImportAPK(part)
+		res, err := s.cfg.Store.ImportAPK(part, opts)
 		part.Close()
+		if errors.Is(err, store.ErrForbidden) {
+			writeErr(w, 403, err.Error())
+			return
+		}
 		if err != nil {
 			writeErr(w, 422, fmt.Sprintf("%s: %v", part.FileName(), err))
 			return
 		}
-		slog.Info("imported apk", "package", res.App.Package, "versionCode", res.Version.VersionCode, "created", res.Created, "replaced", res.Replaced)
+		slog.Info("imported apk", "package", res.App.Package, "versionCode", res.Version.VersionCode, "created", res.Created, "replaced", res.Replaced, "by", p.User)
 		results = append(results, res)
 	}
 	if len(results) == 0 {
@@ -558,7 +645,83 @@ func toDevice(d *store.Device) deviceJSON {
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"user": r.Context().Value(ctxUser), "store": s.cfg.ServerName, "version": s.cfg.Version})
+	p := principalOf(r)
+	out := map[string]any{"user": p.User, "store": s.cfg.ServerName, "version": s.cfg.Version, "kind": "admin"}
+	if p.Token != nil {
+		out["kind"] = "token"
+		out["token"] = toToken(p.Token)
+	}
+	writeJSON(w, 200, out)
+}
+
+// --- API tokens -------------------------------------------------------------------
+
+type tokenJSON struct {
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Prefix    string     `json:"prefix"`
+	Scopes    []string   `json:"scopes"`
+	Packages  []string   `json:"packages"`
+	CreatedAt time.Time  `json:"createdAt"`
+	CreatedBy string     `json:"createdBy"`
+	ExpiresAt *time.Time `json:"expiresAt"`
+	LastUsed  *time.Time `json:"lastUsed"`
+	Expired   bool       `json:"expired"`
+}
+
+func toToken(t *store.APIToken) tokenJSON {
+	j := tokenJSON{ID: t.ID, Name: t.Name, Prefix: t.Prefix, Scopes: t.Scopes, Packages: t.Packages, CreatedAt: t.CreatedAt, CreatedBy: t.CreatedBy, Expired: t.Expired()}
+	if j.Packages == nil {
+		j.Packages = []string{}
+	}
+	if !t.ExpiresAt.IsZero() {
+		e := t.ExpiresAt
+		j.ExpiresAt = &e
+	}
+	if !t.LastUsed.IsZero() {
+		l := t.LastUsed
+		j.LastUsed = &l
+	}
+	return j
+}
+
+func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) {
+	toks := s.cfg.Store.Tokens()
+	out := make([]tokenJSON, 0, len(toks))
+	for _, t := range toks {
+		out = append(out, toToken(t))
+	}
+	writeJSON(w, 200, map[string]any{"tokens": out, "scopes": store.AllScopes})
+}
+
+func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
+	var p struct {
+		Name        string   `json:"name"`
+		Scopes      []string `json:"scopes"`
+		Packages    []string `json:"packages"`
+		ExpiresDays int      `json:"expiresDays"` // 0: never
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&p); err != nil {
+		writeErr(w, 400, "bad json: "+err.Error())
+		return
+	}
+	user := principalOf(r).User
+	t, plain, err := s.cfg.Store.CreateToken(p.Name, p.Scopes, p.Packages, time.Duration(p.ExpiresDays)*24*time.Hour, user)
+	if err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	slog.Info("api token created", "token", t.ID, "name", t.Name, "scopes", t.Scopes, "packages", t.Packages, "by", user)
+	// The plaintext is shown exactly once.
+	writeJSON(w, 201, map[string]any{"token": toToken(t), "secret": plain})
+}
+
+func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {
+	if s.storeErr(w, s.cfg.Store.RevokeToken(r.PathValue("id"))) {
+		return
+	}
+	slog.Info("api token revoked", "token", r.PathValue("id"), "by", principalOf(r).User)
+	w.WriteHeader(204)
 }
 
 func (s *Server) listDevices(w http.ResponseWriter, r *http.Request) {
@@ -644,6 +807,10 @@ func (s *Server) storeErr(w http.ResponseWriter, err error) bool {
 		writeErr(w, 404, "not found")
 	case errors.Is(err, store.ErrProtected):
 		writeErr(w, 409, err.Error())
+	case errors.Is(err, store.ErrForbidden):
+		writeErr(w, 403, err.Error())
+	case errors.Is(err, store.ErrInvalidScope):
+		writeErr(w, 400, err.Error())
 	default:
 		slog.Error("store", "err", err)
 		writeErr(w, 500, err.Error())

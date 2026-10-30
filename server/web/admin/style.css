@@ -156,6 +156,25 @@ tr:last-child td { border-bottom: 0; }
 .devices input.rename { border: 1px solid transparent; padding: 3px 6px; margin-left: -6px; width: 100%; border-radius: 4px; font-weight: 500; }
 .devices input.rename:hover, .devices input.rename:focus { border-color: var(--line-strong); }
 
+/* API tokens */
+#page-tokens { grid-template-columns: 420px 1fr; }
+.tok-new { padding: 24px; background: var(--paper); border-right: 1px solid var(--line); }
+.tok-form { display: grid; gap: 14px; }
+.tok-form label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.tok-form label input, .tok-form label textarea, .tok-form select { font-size: 14px; color: var(--ink); }
+.tok-form select { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); }
+.scopes { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px 12px; margin: 0; display: grid; gap: 10px; }
+.scopes legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.scopes label.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--ink); }
+.scopes label.check input { margin-top: 3px; }
+.scopes small { display: block; color: var(--muted); font-size: 12px; }
+.tokens-wrap { padding: 24px; min-width: 0; }
+.tokens tr.hid td { color: var(--muted); }
+.tag.red { color: var(--warn); border-color: var(--warn); }
+.snippet { background: var(--tv); color: #d9dee5; padding: 12px 14px; border-radius: var(--radius); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; overflow-x: auto; margin: 0; }
+.secret { display: flex; gap: 8px; margin-bottom: 14px; }
+.secret input { flex: 1; font-size: 13px; }
+
 /* dialog, toast */
 dialog { border: 1px solid var(--line); border-radius: 8px; padding: 20px; width: min(480px, 90vw); }
 dialog::backdrop { background: rgba(15,18,22,.5); }
@@ -165,8 +184,8 @@ dialog textarea { width: 100%; margin-bottom: 12px; }
 .toast.err { background: var(--warn); }
 
 @media (max-width: 900px) {
-  .page, #page-devices, .page:has(.editor:not([hidden])) { grid-template-columns: 1fr; }
-  .side, .pair { border-right: 0; border-bottom: 1px solid var(--line); }
+  .page, #page-devices, #page-tokens, .page:has(.editor:not([hidden])) { grid-template-columns: 1fr; }
+  .side, .pair, .tok-new { border-right: 0; border-bottom: 1px solid var(--line); }
   .editor { position: fixed; inset: 52px 0 0 0; overflow: auto; border-left: 0; z-index: 4; }
   .apps th:nth-child(5), .apps td:nth-child(5) { display: none; }
   .top { gap: 16px; padding: 0 16px; }

@@ -13,6 +13,7 @@
   <nav class="tabs" role="tablist">
     <a href="#apps" data-tab="apps" class="active">Apps</a>
     <a href="#devices" data-tab="devices">Devices <span id="pending-badge" class="badge" hidden></span></a>
+    <a href="#tokens" data-tab="tokens">API tokens</a>
   </nav>
   <div class="who" id="who"></div>
 </header>
@@ -103,6 +104,56 @@
     <p id="devices-empty" class="dim" hidden>No TVs are linked yet.</p>
   </section>
 </main>
+
+<main id="page-tokens" class="page" hidden>
+  <section class="tok-new">
+    <h2>New API token</h2>
+    <p>For scripts and CI. A token acts on your behalf for the scopes you pick, and only for the packages you list. The token is shown once, when it is created.</p>
+    <form id="tok-form" class="tok-form">
+      <label>Name
+        <input id="tok-name" placeholder="e.g. github-actions better-xcloud" required>
+      </label>
+      <fieldset class="scopes">
+        <legend>Allowed to</legend>
+        <label class="check"><input type="checkbox" name="scope" value="publish" checked> <span><b>Publish</b><small>Upload APKs and replace icons</small></span></label>
+        <label class="check"><input type="checkbox" name="scope" value="read"> <span><b>Read</b><small>List apps, download APKs</small></span></label>
+        <label class="check"><input type="checkbox" name="scope" value="manage"> <span><b>Manage</b><small>Edit, hide or delete apps and versions, change categories</small></span></label>
+        <label class="check"><input type="checkbox" name="scope" value="devices"> <span><b>Devices</b><small>Approve, rename and unlink TVs</small></span></label>
+      </fieldset>
+      <label>Only these packages <span class="dim">(optional, one per line)</span>
+        <textarea id="tok-pkgs" rows="3" placeholder="com.example.app" spellcheck="false"></textarea>
+      </label>
+      <label>Expires
+        <select id="tok-exp">
+          <option value="0">Never</option>
+          <option value="30">In 30 days</option>
+          <option value="90">In 90 days</option>
+          <option value="365">In a year</option>
+        </select>
+      </label>
+      <div class="actions"><button class="primary" type="submit">Create token</button></div>
+    </form>
+  </section>
+  <section class="tokens-wrap">
+    <h2>Tokens</h2>
+    <table class="tokens">
+      <thead><tr><th>Name</th><th>Token</th><th>Allowed to</th><th>Packages</th><th>Last used</th><th>Expires</th><th></th></tr></thead>
+      <tbody id="tokens"></tbody>
+    </table>
+    <p id="tokens-empty" class="dim" hidden>No tokens yet. Create one on the left to publish from a script or CI.</p>
+    <h3>Using a token</h3>
+    <pre class="snippet" id="tok-usage"></pre>
+  </section>
+</main>
+
+<dialog id="tok-dialog">
+  <form method="dialog">
+    <h3>Token created</h3>
+    <p class="dim">Copy it now. It is not stored and cannot be shown again.</p>
+    <div class="secret"><input id="tok-secret" class="mono" readonly spellcheck="false"><button type="button" id="tok-copy">Copy</button></div>
+    <div class="actions"><button class="primary" value="done">Done</button></div>
+  </form>
+</dialog>
 
 <dialog id="cats-dialog">
   <form method="dialog">
