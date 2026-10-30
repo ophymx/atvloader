@@ -10,6 +10,15 @@ Three parts, one repo:
 
 Also here: `deploy/` (example nginx config for oauth2-proxy), `packaging/` (systemd unit and Debian scripts), `tools/` (version script and asset generator).
 
+![Admin page: the apps tab with Jellyfin selected, showing its category, description, featured flag and the signed version](docs/screenshots/admin-apps.png)
+
+<p>
+<img src="docs/screenshots/admin-devices.png" alt="Devices tab: a Chromecast waiting for approval with its code, and a linked Shield" width="49%">
+<img src="docs/screenshots/admin-tokens.png" alt="API tokens tab: a publish token limited to one package and a read-only token" width="49%">
+</p>
+
+<!-- TODO before v0.1.0: TV screenshots (shelf, app page, pairing code) go here; see docs/screenshots/README.md -->
+
 **Why not F-Droid?** An F-Droid repo is a signed static index and needs a separate client that was not built for a remote; adding an app means running `fdroid update` and copying files around. atvloader is a single server with an upload button and a TV-first client, and it is the only thing you need to install on the TV. It does not implement the F-Droid index format.
 
 ## How it fits together

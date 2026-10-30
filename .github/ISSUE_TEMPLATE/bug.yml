@@ -1,0 +1,35 @@
+name: Bug report
+description: Something does not work as described
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Server version from `GET /healthz` or the admin footer, and the TV app version from its Settings screen.
+      placeholder: server 0.1.0, TV app 0.1.0 (1000)
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Where
+      options:
+        - TV app
+        - Server / API
+        - Admin UI
+        - Packaging / install (deb, Docker, release workflow)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got. Server log lines (`journalctl -u atvloader`) and `adb logcat -s ATVLoader` output help a lot.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: TV / device
+      placeholder: Chromecast with Google TV (HD), Android 14
