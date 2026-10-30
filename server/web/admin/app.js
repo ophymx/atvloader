@@ -128,8 +128,10 @@
     $('#ed-hidden').disabled = !!a.protected;
     $('#ed-delete').hidden = !!a.protected;
     $('#ed-self').hidden = !a.protected;
+    const latestSigner = a.versions[0]?.signer?.sha256;
     $('#ed-versions').innerHTML = a.versions.map(v => `<li data-code="${v.versionCode}">
       <div class="v"><b>${esc(v.versionName)} <span class="dim">(${v.versionCode})</span></b><span class="meta">${size(v.size)} · min API ${v.minSdk} · added ${ago(v.addedAt)}</span></div>
+      ${v.signer ? `<div class="signer${latestSigner && v.signer.sha256 !== latestSigner ? ' warn' : ''}" title="Certificate SHA-256 ${esc(v.signer.sha256)}">Signed by ${esc(v.signer.name || 'an unnamed certificate')} · <code>${esc(v.signer.sha256.slice(0, 16))}…</code>${latestSigner && v.signer.sha256 !== latestSigner ? ' · different key from the latest version' : ''}</div>` : ''}
       <textarea rows="2" placeholder="What changed in this version? Shown on the TV.">${esc(v.changelog)}</textarea>
       <div class="vact"><button class="save-log">Save note</button><a class="btn" href="${esc(v.downloadUrl)}">Download</a>${a.protected && a.versions.length === 1 ? '' : '<button class="ghost red del-ver">Delete this version</button>'}</div>
     </li>`).join('');
@@ -205,12 +207,14 @@
     files.filter(f => /\.apk$/i.test(f.name) || f.type === 'application/vnd.android.package-archive' || !f.type).forEach(upload);
   }
 
-  function upload(file) {
+  function upload(file, allowSignerChange = false) {
     const li = document.createElement('li');
     li.innerHTML = `<span>${esc(file.name)} <span class="dim">${size(file.size)}</span></span><div class="bar"><i></i></div><span class="st dim">Uploading…</span>`;
     $('#uploads').prepend(li);
     const bar = $('.bar i', li), st = $('.st', li);
-    const fd = new FormData(); fd.append('apk', file, file.name);
+    const fd = new FormData();
+    if (allowSignerChange) fd.append('allowSignerChange', '1'); // must precede the file: the server streams the form
+    fd.append('apk', file, file.name);
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API}/admin/apps`);
     xhr.upload.onprogress = e => { if (e.lengthComputable) bar.style.width = `${(e.loaded / e.total) * 100}%`; };
@@ -224,6 +228,9 @@
         st.textContent = `${r.created ? 'Added' : r.replaced ? 'Replaced version' : 'Added version'} ${r.app.name} ${r.app.versions.find(v => v.versionCode === r.versionCode)?.versionName || ''}`;
         loadApps().then(() => select(r.app.package));
         setTimeout(() => li.remove(), 8000);
+      } else if (xhr.status === 409 && body.code === 'signer_mismatch') {
+        li.remove();
+        if (confirm(`${body.error}\n\nTVs that have the current version installed cannot update to this one; they would have to uninstall it first. Add it anyway?`)) upload(file, true);
       } else {
         st.className = 'st err'; st.textContent = body.error || `Upload failed (HTTP ${xhr.status})`;
       }

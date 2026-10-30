@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -231,15 +232,16 @@ func (s *Server) device(next http.HandlerFunc) http.Handler {
 // --- JSON shapes ----------------------------------------------------------
 
 type versionJSON struct {
-	VersionCode int64     `json:"versionCode"`
-	VersionName string    `json:"versionName"`
-	Size        int64     `json:"size"`
-	SHA256      string    `json:"sha256"`
-	MinSDK      int32     `json:"minSdk"`
-	TargetSDK   int32     `json:"targetSdk"`
-	AddedAt     time.Time `json:"addedAt"`
-	Changelog   string    `json:"changelog"`
-	DownloadURL string    `json:"downloadUrl"`
+	VersionCode int64         `json:"versionCode"`
+	VersionName string        `json:"versionName"`
+	Size        int64         `json:"size"`
+	SHA256      string        `json:"sha256"`
+	MinSDK      int32         `json:"minSdk"`
+	TargetSDK   int32         `json:"targetSdk"`
+	AddedAt     time.Time     `json:"addedAt"`
+	Changelog   string        `json:"changelog"`
+	DownloadURL string        `json:"downloadUrl"`
+	Signer      *store.Signer `json:"signer,omitempty"`
 }
 
 type appJSON struct {
@@ -266,6 +268,7 @@ func toVersion(a *store.App, v *store.Version, admin bool) *versionJSON {
 		VersionCode: v.VersionCode, VersionName: v.VersionName, Size: v.Size, SHA256: v.SHA256,
 		MinSDK: v.MinSDK, TargetSDK: v.TargetSDK, AddedAt: v.AddedAt, Changelog: v.Changelog,
 		DownloadURL: fmt.Sprintf("%s%s/versions/%d/download", base, a.Package, v.VersionCode),
+		Signer:      v.Signer,
 	}
 }
 
@@ -413,11 +416,19 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	}}
+	// ?allowSignerChange=1, or a form field of that name before the file part.
+	opts.AllowSignerChange = isTrue(r.URL.Query().Get("allowSignerChange"))
 	var results []*store.ImportResult
 	for {
 		part, err := mr.NextPart()
 		if err != nil {
 			break
+		}
+		if part.FormName() == "allowSignerChange" {
+			val, _ := io.ReadAll(io.LimitReader(part, 16))
+			part.Close()
+			opts.AllowSignerChange = isTrue(string(val))
+			continue
 		}
 		if part.FormName() != "apk" && part.FormName() != "apks" {
 			part.Close()
@@ -427,6 +438,11 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		part.Close()
 		if errors.Is(err, store.ErrForbidden) {
 			writeErr(w, 403, err.Error())
+			return
+		}
+		if errors.Is(err, store.ErrSignerMismatch) {
+			// code lets the admin UI offer "add anyway"; scripts pass allowSignerChange=1.
+			writeJSON(w, 409, map[string]any{"error": fmt.Sprintf("%s: %v", part.FileName(), err), "code": "signer_mismatch"})
 			return
 		}
 		if err != nil {
@@ -834,6 +850,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(v)
+}
+
+func isTrue(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }
 
 func writeErr(w http.ResponseWriter, status int, msg string) {

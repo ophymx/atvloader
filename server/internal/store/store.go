@@ -22,6 +22,10 @@ import (
 var (
 	ErrNotFound  = errors.New("not found")
 	ErrProtected = errors.New("this app is ATV Loader itself and cannot be removed or hidden")
+	// ErrSignerMismatch: the uploaded APK is signed with a different key than
+	// the versions already stored, so TVs cannot update to it without
+	// uninstalling first. ImportOptions.AllowSignerChange overrides it.
+	ErrSignerMismatch = errors.New("signed with a different key than the versions already in the store")
 )
 
 // Version is one uploaded APK for an app.
@@ -35,6 +39,7 @@ type Version struct {
 	TargetSDK   int32     `json:"targetSdk"`
 	AddedAt     time.Time `json:"addedAt"`
 	Changelog   string    `json:"changelog,omitempty"`
+	Signer      *Signer   `json:"signer,omitempty"` // nil for APKs stored before signers were recorded, or unsigned ones
 }
 
 // App is one package with any number of versions, newest first.
@@ -361,6 +366,9 @@ type ImportOptions struct {
 	// Allow, if set, is consulted with the APK's package name before anything
 	// is stored; a non-nil error aborts the import and is returned as-is.
 	Allow func(pkg string) error
+	// AllowSignerChange stores an APK whose signing certificate differs from
+	// the versions already present instead of failing with ErrSignerMismatch.
+	AllowSignerChange bool
 }
 
 // ImportAPK reads an APK from r, extracts its metadata, and files it.
@@ -411,6 +419,14 @@ func (s *Store) ImportAPK(r io.Reader, opts ...ImportOptions) (*ImportResult, er
 			}
 		}
 	}
+	if ok && meta.Signer != nil && !o.AllowSignerChange {
+		for _, old := range a.Versions {
+			if old.Signer != nil && old.Signer.SHA256 != meta.Signer.SHA256 {
+				return nil, fmt.Errorf("%w: version %s is signed by %s (%s…), this APK by %s (%s…)", ErrSignerMismatch,
+					old.VersionName, signerLabel(old.Signer), old.Signer.SHA256[:12], signerLabel(meta.Signer), meta.Signer.SHA256[:12])
+			}
+		}
+	}
 	if !ok {
 		name := strings.TrimSpace(o.Name)
 		if name == "" {
@@ -450,6 +466,7 @@ func (s *Store) ImportAPK(r io.Reader, opts ...ImportOptions) (*ImportResult, er
 		MinSDK:      meta.MinSDK,
 		TargetSDK:   meta.TargetSDK,
 		AddedAt:     now,
+		Signer:      meta.Signer,
 	}
 	replaced := false
 	for i, old := range a.Versions {

@@ -127,6 +127,9 @@ tr:last-child td { border-bottom: 0; }
 .versions .v { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .versions .v b { font-weight: 600; }
 .versions .meta { color: var(--muted); font-size: 12px; }
+.versions .signer { color: var(--muted); font-size: 12px; }
+.versions .signer code { font-size: 11px; }
+.versions .signer.warn { color: var(--warn); }
 .versions textarea { font-size: 13px; }
 .versions .vact { display: flex; gap: 6px; }
 .versions button { padding: 3px 8px; font-size: 12px; }

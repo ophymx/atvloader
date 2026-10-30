@@ -38,7 +38,9 @@ func importLoader(st *store.Store, path string) string {
 	}
 	defer r.Close()
 	res, err := st.ImportAPK(r, store.ImportOptions{
-		Protect: true, SkipSameSHA: true, Name: "ATV Loader",
+		// A loader built with a new key must still be served (the operator
+		// chose it); TVs with the old build show an install failure.
+		Protect: true, SkipSameSHA: true, AllowSignerChange: true, Name: "ATV Loader",
 		Description: "This app. Install updates here to get new features on this TV.",
 	})
 	if err != nil {

@@ -18,6 +18,7 @@ type apkMeta struct {
 	MinSDK      int32
 	TargetSDK   int32
 	Icon        image.Image
+	Signer      *Signer
 }
 
 // parseAPK pulls the manifest fields and the best raster icon out of an APK.
@@ -30,6 +31,10 @@ func parseAPK(path string) (*apkMeta, error) {
 
 	m := a.Manifest()
 	meta := &apkMeta{Package: a.PackageName()}
+	if meta.Signer, err = apkSigner(path); err != nil {
+		slog.Debug("read apk signer", "apk", path, "err", err)
+		meta.Signer = nil
+	}
 	if meta.Package == "" {
 		if meta.Package, err = m.Package.String(); err != nil {
 			return nil, err

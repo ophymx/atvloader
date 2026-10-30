@@ -98,13 +98,15 @@ With `Authorization: Bearer <token>`:
 
 Every version carries its `sha256`. The TV app hashes each download and refuses to hand a file to the installer when the hash or the length does not match, so a truncated or tampered download fails with a clear message instead of an installer error. Android then verifies the APK's own signature and, for updates, that it matches the installed app's signer.
 
+Every version also records its `signer` (the signing certificate's subject and SHA-256 fingerprint, read from the v3/v2 signing block or the v1 signature). An upload signed with a different key than the versions already stored is refused with `409 {"code":"signer_mismatch"}`, because TVs with the old version installed could not update to it; the admin UI asks before adding it anyway, and scripts pass `allowSignerChange=1` (query string or form field before the file) to accept it.
+
 Admin (behind the proxy):
 
 | | |
 | --- | --- |
 | `GET /api/v1/admin/me` | who the proxy says you are |
 | `GET /api/v1/admin/apps` | every app including hidden ones |
-| `POST /api/v1/admin/apps` multipart `apk=@file` | import; package, version, label and icon are read from the APK |
+| `POST /api/v1/admin/apps` multipart `apk=@file` | import; package, version, label, icon and signer are read from the APK; `409 signer_mismatch` unless `allowSignerChange=1` |
 | `GET /api/v1/admin/apps/{pkg}` | one app with all versions |
 | `GET /api/v1/admin/tokens`, `POST /api/v1/admin/tokens`, `DELETE /api/v1/admin/tokens/{id}` | API tokens (signed-in admins only); `POST` takes `{name, scopes[], packages[], expiresDays}` and returns the secret once |
 | `PATCH /api/v1/admin/apps/{pkg}` `{name, description, category, featured, hidden}` | edit |
