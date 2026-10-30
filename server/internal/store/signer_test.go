@@ -3,38 +3,40 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-// Fingerprints as printed by `apksigner verify --print-certs`.
+// The loader APK is signed with whatever key the build had: the release key
+// locally, the debug key in CI. Its fingerprint must be well formed and its
+// subject one of the two. Better xCloud (BXC_APK, local only) is pinned to
+// the fingerprint `apksigner verify --print-certs` prints.
 func TestAPKSigner(t *testing.T) {
-	cases := []struct {
-		path, sha256 string
-	}{
-		{"../../self/atvloader.apk", "bb5cb3d3cb4ec006ee26692d4aa2a72d79fa67c25b5d0d0216727c2e75fcea9b"},
-		{os.Getenv("BXC_APK"), "256fa8b7f9d1920b3e3688ff0157176593cfb329488168b82c26fcf74ec125da"},
-	}
 	ran := false
-	for _, c := range cases {
-		if c.path == "" {
-			continue
-		}
-		if _, err := os.Stat(c.path); err != nil {
-			t.Logf("skip %s: %v", c.path, err)
-			continue
-		}
+	if _, err := os.Stat("../../self/atvloader.apk"); err == nil {
 		ran = true
-		s, err := apkSigner(c.path)
-		if err != nil {
-			t.Fatalf("%s: %v", c.path, err)
+		s, err := apkSigner("../../self/atvloader.apk")
+		if err != nil || s == nil {
+			t.Fatalf("loader apk: signer=%v err=%v", s, err)
 		}
-		if s == nil {
-			t.Fatalf("%s: no signer found", c.path)
+		if len(s.SHA256) != 64 || strings.Trim(s.SHA256, "0123456789abcdef") != "" {
+			t.Errorf("loader apk: fingerprint %q is not 32 bytes of lowercase hex", s.SHA256)
 		}
-		if s.SHA256 != c.sha256 {
-			t.Errorf("%s: fingerprint %s, want %s", filepath.Base(c.path), s.SHA256, c.sha256)
+		if !strings.Contains(s.Name, "CN=ATV Loader") && !strings.Contains(s.Name, "CN=Android Debug") {
+			t.Errorf("loader apk: unexpected signer %q", s.Name)
 		}
-		t.Logf("%s: %s %q", filepath.Base(c.path), s.SHA256, s.Name)
+		t.Logf("atvloader.apk: %s %q", s.SHA256, s.Name)
+	}
+	if p := os.Getenv("BXC_APK"); p != "" {
+		ran = true
+		s, err := apkSigner(p)
+		if err != nil || s == nil {
+			t.Fatalf("%s: signer=%v err=%v", p, s, err)
+		}
+		const want = "256fa8b7f9d1920b3e3688ff0157176593cfb329488168b82c26fcf74ec125da"
+		if s.SHA256 != want || s.Name != "CN=redphx" {
+			t.Errorf("%s: got %s %q, want %s CN=redphx", filepath.Base(p), s.SHA256, s.Name, want)
+		}
 	}
 	if !ran {
 		t.Skip("no APKs available")
