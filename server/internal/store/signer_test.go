@@ -40,3 +40,32 @@ func TestAPKSigner(t *testing.T) {
 		t.Skip("no APKs available")
 	}
 }
+
+// Labels, as aapt2 dump badging prints them. Better xCloud's label is a
+// string that aliases another string, which androidbinary alone cannot read.
+func TestAPKLabel(t *testing.T) {
+	cases := []struct{ path, label string }{
+		{"../../self/atvloader.apk", "ATV Loader"},
+		{os.Getenv("BXC_APK"), "Better xCloud"},
+	}
+	ran := false
+	for _, c := range cases {
+		if c.path == "" {
+			continue
+		}
+		if _, err := os.Stat(c.path); err != nil {
+			continue
+		}
+		ran = true
+		m, err := parseAPK(c.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Label != c.label {
+			t.Errorf("%s: label %q, want %q", filepath.Base(c.path), m.Label, c.label)
+		}
+	}
+	if !ran {
+		t.Skip("no APKs available")
+	}
+}

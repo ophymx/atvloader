@@ -1,10 +1,12 @@
 package store
 
 import (
+	"encoding/xml"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"log/slog"
+	"strings"
 
 	"github.com/shogo82148/androidbinary"
 	"github.com/shogo82148/androidbinary/apk"
@@ -19,6 +21,40 @@ type apkMeta struct {
 	TargetSDK   int32
 	Icon        image.Image
 	Signer      *Signer
+}
+
+// appLabel resolves android:label. androidbinary stops at one level of
+// indirection, but apps built with resource shrinking or string aliasing
+// often have @string/app_name point at another string, which it reports as
+// "invalid type: uint32"; chase the chain ourselves in that case.
+func appLabel(path string, a *apk.Apk) string {
+	if l, err := a.Label(nil); err == nil && strings.TrimSpace(l) != "" && !androidbinary.IsResID(l) {
+		return strings.TrimSpace(l)
+	}
+	attr, _ := a.Manifest().App.Label.MarshalXMLAttr(xml.Name{})
+	raw := strings.TrimSpace(attr.Value)
+	if raw == "" {
+		return ""
+	}
+	if !androidbinary.IsResID(raw) {
+		return raw
+	}
+	id, err := androidbinary.ParseResID(raw)
+	if err != nil {
+		return ""
+	}
+	res, err := openAPKRes(path)
+	if err != nil {
+		return ""
+	}
+	defer res.Close()
+	v, err := res.resolve(uint32(id))
+	if err != nil {
+		slog.Debug("resolve label", "apk", path, "label", raw, "err", err)
+		return ""
+	}
+	s, _ := v.(string)
+	return strings.TrimSpace(s)
 }
 
 // parseAPK pulls the manifest fields and the best raster icon out of an APK.
@@ -46,7 +82,7 @@ func parseAPK(path string) (*apkMeta, error) {
 	meta.VersionName, _ = m.VersionName.String()
 	meta.MinSDK, _ = m.SDK.Min.Int32()
 	meta.TargetSDK, _ = m.SDK.Target.Int32()
-	meta.Label, _ = a.Label(nil)
+	meta.Label = appLabel(path, a)
 
 	// Adaptive icons (API 26+) are XML and cannot be decoded, so ask for
 	// pre-26 raster variants at a few densities, then fall back to default.
