@@ -1,32 +1,37 @@
 name: Release
 
 # Tag v* → build the signed TV app, embed it in the server, publish a GitHub
-# release with the .deb/.tar.gz for amd64+arm64 and the APK.
+# release with the .deb/.tar.gz for amd64+arm64, the APK, and the image on
+# GHCR.
 on:
   push:
     tags: ["v*"]
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    # The signing keystore lives in the "release" environment, which only
+    # v* tags may deploy to, so a workflow on a branch or a PR never sees it.
+    environment: release
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # goreleaser changelog and tools/version.sh need tags
 
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platforms;android-37.2 build-tools;37.0.0 platform-tools
 
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Install release keystore
         # Updates only install over the same signing key, so a release must
@@ -59,11 +64,20 @@ jobs:
           "$BT/apksigner" verify --print-certs server/self/atvloader.apk
           "$BT/aapt2" dump badging server/self/atvloader.apk | grep '^package:'
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
 
-      - uses: goreleaser/goreleaser-action@v7
+      # Multi-arch images: QEMU for the arm64 build, buildx for --platform.
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
           version: "~> v2"

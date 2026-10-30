@@ -1,9 +1,11 @@
 # Minimal homelab deployment. Put nginx + oauth2-proxy in front; see deploy/nginx.conf.
+# `docker compose up -d` pulls the published image; `make docker` (compose
+# --build) builds it from ./server instead, with the APK staged by `make apk`.
 services:
   atvloader:
+    image: ghcr.io/ophymx/atvloader:latest
     build:
       context: ./server
-    image: atvloader-server:latest
     container_name: atvloader
     restart: unless-stopped
     ports:

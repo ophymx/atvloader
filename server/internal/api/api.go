@@ -51,7 +51,9 @@ func New(cfg Config) *Server {
 	}
 	m.HandleFunc("GET /atvloader.apk", s.loaderDownload)
 
-	// Unauthenticated: server discovery and the activation-code flow.
+	// Unauthenticated: liveness for Docker/systemd/proxies, server discovery
+	// and the activation-code flow.
+	m.HandleFunc("GET /healthz", s.healthz)
 	m.HandleFunc("GET /api/v1/info", s.info)
 	m.HandleFunc("POST /api/v1/device/code", s.deviceCode)
 	m.HandleFunc("POST /api/v1/device/token", s.deviceToken)
@@ -104,6 +106,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	rw := &statusWriter{ResponseWriter: w, status: 200}
 	s.mux.ServeHTTP(rw, r)
+	if r.URL.Path == "/healthz" && rw.status == http.StatusOK {
+		return // probes every few seconds would drown the log
+	}
 	slog.Info("http", "method", r.Method, "path", r.URL.Path, "status", rw.status, "ms", time.Since(start).Milliseconds(), "from", r.RemoteAddr)
 }
 
@@ -289,6 +294,11 @@ func toApp(a *store.App, full bool, admin bool) *appJSON {
 }
 
 // --- public handlers --------------------------------------------------------
+
+func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": s.cfg.Version})
+}
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	apps := s.cfg.Store.List()

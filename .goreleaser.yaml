@@ -90,14 +90,40 @@ nfpms:
       lintian_overrides:
         - statically-linked-binary
 
+# Multi-arch image on GHCR: ghcr.io/ophymx/atvloader:<version>, plus :vX.Y
+# and :latest for stable versions (pre-releases only get their own tag).
+# Snapshots build per-platform images locally and push nothing.
+dockers_v2:
+  - id: atvloader
+    dockerfile: Dockerfile.release
+    ids: [atvloader-server]
+    images:
+      - ghcr.io/ophymx/atvloader
+    tags:
+      - "{{ .Version }}"
+      - "{{ if and (not .Prerelease) (not .IsSnapshot) }}v{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "{{ if and (not .Prerelease) (not .IsSnapshot) }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: Private Android TV app store
+      org.opencontainers.image.source: https://github.com/ophymx/atvloader
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.licenses: MIT
+
 checksum:
   name_template: checksums.txt
   extra_files:
     - glob: server/self/atvloader.apk
       name_template: "atvloader_{{ .Version }}.apk"
 
+# No "+" here: the version is also a Docker tag.
 snapshot:
-  version_template: "{{ incpatch .Version }}-next+{{ .ShortCommit }}"
+  version_template: "{{ incpatch .Version }}-next.{{ .ShortCommit }}"
 
 changelog:
   use: git

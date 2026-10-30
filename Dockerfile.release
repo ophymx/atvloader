@@ -1,0 +1,14 @@
+# Used by GoReleaser (.goreleaser.yaml → dockers_v2): the binaries are already
+# built and the context holds them under <os>/<arch>/, so this only assembles
+# the runtime image. server/Dockerfile is the self-contained equivalent for
+# `docker compose build`.
+FROM alpine:3.22
+ARG TARGETPLATFORM
+RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 1000 atv
+COPY $TARGETPLATFORM/atvloader-server /usr/local/bin/atvloader-server
+USER atv
+VOLUME /data
+ENV ATVLOADER_ADDR=:8080 ATVLOADER_DATA=/data
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1
+ENTRYPOINT ["atvloader-server"]

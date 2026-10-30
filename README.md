@@ -40,8 +40,14 @@ To ship a new TV build: tag a release (`git tag v0.2.0 && git push origin v0.2.0
 make apk        # TV app → server/self/atvloader.apk (needs the Android SDK, see below)
 make server     # → dist/atvloader-server with the APK embedded
 make run        # serve ./data on :8080
-# or
-make apk && docker compose up -d --build
+make test       # server and TV app unit tests
+```
+
+Or skip the toolchains and run the published image, which has the matching TV app built in:
+
+```sh
+docker compose up -d        # ghcr.io/ophymx/atvloader:latest, data in ./data
+# or build it yourself: make apk && docker compose up -d --build
 ```
 
 ### Debian package
@@ -76,6 +82,7 @@ Unauthenticated:
 | --- | --- |
 | `GET /` | public front page with the loader download, for TV browsers |
 | `GET /atvloader.apk` | newest bundled ATV Loader APK |
+| `GET /healthz` | `{status:"ok", version}`; for Docker, systemd and proxy health checks |
 | `GET /api/v1/info` | `{service:"atvloader", name, version, apps, auth:"device", loader:{package, versionCode, versionName}}` |
 | `POST /api/v1/device/code` `{model, product, sdk}` | `{deviceCode, userCode, expiresIn, interval}` |
 | `POST /api/v1/device/token` `{deviceCode}` | `{status:"pending"}` / `{status:"approved", token, deviceName}` / `{status:"denied"|"expired"}` |
@@ -164,9 +171,9 @@ A GitHub Actions step that publishes a release build:
 
 ## Releases
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`: it builds the signed APK, embeds it in the server, and publishes a GitHub release with `atvloader_<ver>_{amd64,arm64}.deb`, the tarballs, `atvloader_<ver>.apk` and `checksums.txt`. Every push to `main` and every PR runs `ci.yml`, which does the same as a snapshot (debug-signed APK when the secrets are absent) and keeps the output as a workflow artifact for a week.
+Pushing a `v*` tag runs `.github/workflows/release.yml`: it builds the signed APK, embeds it in the server, publishes a GitHub release with `atvloader_<ver>_{amd64,arm64}.deb`, the tarballs, `atvloader_<ver>.apk` and `checksums.txt`, and pushes `ghcr.io/ophymx/atvloader:<ver>` (plus `:vX.Y` and `:latest` for stable versions). Every push to `main` and every PR runs `ci.yml`, which runs the tests and does the same build as a snapshot (debug-signed APK when the secrets are absent, images not pushed) and keeps the output as a workflow artifact for a week. Actions are pinned to commit SHAs; Dependabot moves them.
 
-The release job refuses to run without the signing key. Add these repository secrets once:
+The release job runs in the GitHub Environment `release`, which only `v*` tags may deploy to, and refuses to run without the signing key. Create the environment with a tag rule for `v*` (Settings → Environments; optionally add yourself as a required reviewer so a tag push waits for a click), then add these environment secrets once:
 
 | Secret | Value |
 | --- | --- |
@@ -176,10 +183,10 @@ The release job refuses to run without the signing key. Add these repository sec
 | `ANDROID_KEY_PASSWORD` | `keyPassword` |
 
 ```sh
-gh secret set ANDROID_KEYSTORE_B64 --body "$(base64 -w0 tv/keystore/release.jks)"
-gh secret set ANDROID_KEYSTORE_PASSWORD --body "$(sed -n 's/^storePassword=//p' tv/keystore.properties)"
-gh secret set ANDROID_KEY_ALIAS        --body "$(sed -n 's/^keyAlias=//p' tv/keystore.properties)"
-gh secret set ANDROID_KEY_PASSWORD     --body "$(sed -n 's/^keyPassword=//p' tv/keystore.properties)"
+gh secret set --env release ANDROID_KEYSTORE_B64      --body "$(base64 -w0 tv/keystore/release.jks)"
+gh secret set --env release ANDROID_KEYSTORE_PASSWORD --body "$(sed -n 's/^storePassword=//p' tv/keystore.properties)"
+gh secret set --env release ANDROID_KEY_ALIAS         --body "$(sed -n 's/^keyAlias=//p' tv/keystore.properties)"
+gh secret set --env release ANDROID_KEY_PASSWORD      --body "$(sed -n 's/^keyPassword=//p' tv/keystore.properties)"
 git tag v0.1.0 && git push origin v0.1.0
 ```
 

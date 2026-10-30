@@ -1,0 +1,24 @@
+# Keeps the pinned action SHAs, Go modules and Gradle dependencies current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: /server
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        patterns: ["*"]
+  - package-ecosystem: gradle
+    directory: /tv
+    schedule:
+      interval: weekly
+    groups:
+      android:
+        patterns: ["*"]
