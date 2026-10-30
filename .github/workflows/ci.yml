@@ -30,6 +30,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      - name: Test TV app
+        run: cd tv && ./gradlew testDebugUnitTest
+
       - name: Build TV app
         run: make apk
 

@@ -63,12 +63,12 @@ object Installer {
         }
     }
 
-    suspend fun install(context: Context, api: StoreApi, pkg: String, downloadUrl: String) {
+    suspend fun install(context: Context, api: StoreApi, pkg: String, downloadUrl: String, sha256: String = "") {
         val app = context.applicationContext
         val file = File(app.cacheDir, "downloads/$pkg.apk")
         try {
             set(pkg, InstallState.Downloading(0, -1))
-            api.download(downloadUrl, file) { done, total -> set(pkg, InstallState.Downloading(done, total)) }
+            api.download(downloadUrl, file, sha256) { done, total -> set(pkg, InstallState.Downloading(done, total)) }
             set(pkg, InstallState.Installing)
             commit(app, pkg, file)
         } catch (e: Exception) {

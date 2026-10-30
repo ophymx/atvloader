@@ -205,7 +205,7 @@ class StoreViewModel(app: Application) : AndroidViewModel(app) {
         }
         val v = (if (versionCode == null) app.latest else app.versions.firstOrNull { it.versionCode == versionCode } ?: app.latest) ?: return
         viewModelScope.launch {
-            Installer.install(ctx, api, app.pkg, v.downloadUrl)
+            Installer.install(ctx, api, app.pkg, v.downloadUrl, v.sha256)
         }
     }
 

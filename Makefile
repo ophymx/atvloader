@@ -1,5 +1,6 @@
 # Top-level build helpers.
 #   make apk      build the TV app (release) and stage it for embedding in the server
+#   make test     unit tests for the server and the TV app
 #   make server   build the server binary with the staged APK embedded
 #   make docker   build the Docker image (expects `make apk` first, or an APK in server/self/)
 #   make run      run the server locally against ./data
@@ -9,13 +10,17 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 APK = tv/app/build/outputs/apk/release/app-release.apk
 
-.PHONY: apk server docker snapshot release check run assets clean
+.PHONY: apk test server docker snapshot release check run assets clean
 
 # APK version follows git (tools/version.sh): versionName from `git describe`,
 # versionCode from the nearest v* tag.
 apk:
 	cd tv && ATVLOADER_VERSION_NAME=$$(../tools/version.sh | sed -n 1p) ATVLOADER_VERSION_CODE=$$(../tools/version.sh | sed -n 2p) ./gradlew assembleRelease
 	cp $(APK) server/self/atvloader.apk
+
+test:
+	go -C server test ./...
+	cd tv && ./gradlew testDebugUnitTest
 
 server:
 	cd server && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o ../dist/atvloader-server .

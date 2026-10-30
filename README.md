@@ -1,11 +1,16 @@
 # atvloader
 
-A private app store for Android TV, for a homelab.
+A private app store for Android TV, for a homelab. Upload APKs in a browser, browse and install them on the couch with the remote. No file manager, no Downloader app, no typing URLs on the TV.
 
-- **server/** – Go binary. Hosts the APK catalog, a REST API the TV app talks to, and the web admin UI (embedded, no build step).
-- **tv/** – Kotlin + Compose for TV app. Browses the catalog with the remote, installs/updates/uninstalls apps with the system package installer.
-- **deploy/** – example nginx config for running the admin behind oauth2-proxy.
-- **tools/genassets/** – renders the TV banner and launcher icon PNGs.
+Three parts, one repo:
+
+- **An Android TV app** (`tv/`, Kotlin + Compose for TV). Pairs with your server with a six-character code, shows the catalog as rows of apps, installs, updates and uninstalls them through the system package installer, and updates itself from the store.
+- **A server** (`server/`, one Go binary). Stores the APKs, reads name, version and icon out of each one, and serves a REST API to the TV app. Ships as a `.deb`, a tarball or a Docker image.
+- **A web admin UI** (embedded in the server). Drag-and-drop uploads, categories, descriptions, TV approval and API tokens for CI. Sits behind your existing reverse-proxy login.
+
+Also here: `deploy/` (example nginx config for oauth2-proxy), `packaging/` (systemd unit and Debian scripts), `tools/` (version script and asset generator).
+
+**Why not F-Droid?** An F-Droid repo is a signed static index and needs a separate client that was not built for a remote; adding an app means running `fdroid update` and copying files around. atvloader is a single server with an upload button and a TV-first client, and it is the only thing you need to install on the TV. It does not implement the F-Droid index format.
 
 ## How it fits together
 
@@ -15,7 +20,7 @@ A private app store for Android TV, for a homelab.
  Browser ─oauth2-proxy──▶  /admin/, /api/v1/admin/*          ┘
 ```
 
-The admin side does **no authentication of its own**: it trusts the identity header that nginx + oauth2-proxy set (`X-Forwarded-User` by default). TVs authenticate with a bearer token they get through an activation-code flow:
+The admin side has **no login of its own**: a browser session is whoever the identity header from nginx + oauth2-proxy says it is (`X-Forwarded-User` by default), and scripts use [API tokens](#api-tokens-for-automation) minted on the admin page. TVs authenticate with a bearer token they get through an activation-code flow:
 
 1. The TV asks the server for a code and shows it (`ABC-DEF`).
 2. You open the admin page → Devices, see the code in the waiting list (or type it), and approve it.
@@ -27,7 +32,7 @@ Unlinking a TV from the Devices page invalidates its token; the TV drops back to
 
 The server carries the ATV Loader APK it was built with (`server/self/atvloader.apk`, embedded into the binary; `make apk` stages it, or point `-self-apk` / `ATVLOADER_SELF_APK` at a file). At startup it is imported into the catalog as a *protected* app: always listed, cannot be hidden or removed. When a TV sees a newer version of itself in the catalog it shows an "update now" banner above the shelves, and installs it through the normal package installer; the app restarts on the new build.
 
-To ship a new TV build: bump `versionCode` in `tv/app/build.gradle.kts`, `make apk`, rebuild and restart the server (or `make docker`). Every linked TV offers the update on its next refresh.
+To ship a new TV build: tag a release (`git tag v0.2.0 && git push origin v0.2.0`). The tag sets the APK's version (see [Build the TV app](#build-the-tv-app)), CI builds and signs it, and the server in that release embeds it. Install the new server and every linked TV offers the update on its next refresh. Locally, `make apk && make run` does the same with a snapshot version.
 
 ## Build and run
 
@@ -83,6 +88,8 @@ With `Authorization: Bearer <token>`:
 | `GET /api/v1/apps/{pkg}` | full app with every version |
 | `GET /api/v1/apps/{pkg}/icon` | PNG |
 | `GET /api/v1/apps/{pkg}/versions/{versionCode}/download` | the APK (supports ranges, `X-SHA256` header) |
+
+Every version carries its `sha256`. The TV app hashes each download and refuses to hand a file to the installer when the hash or the length does not match, so a truncated or tampered download fails with a clear message instead of an installer error. Android then verifies the APK's own signature and, for updates, that it matches the installed app's signer.
 
 Admin (behind the proxy):
 

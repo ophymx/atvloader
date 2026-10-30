@@ -75,33 +75,20 @@ class StoreApi(private val prefs: Prefs) {
 
     suspend fun app(pkg: String): AppInfo = withContext(Dispatchers.IO) { get("/api/v1/apps/$pkg") }
 
-    /** Streams an APK to [dest], reporting (bytesSoFar, total) as it goes. total is -1 when unknown. */
-    suspend fun download(downloadUrl: String, dest: File, onProgress: (Long, Long) -> Unit) = withContext(Dispatchers.IO) {
+    /**
+     * Streams an APK to [dest], reporting (bytesSoFar, total) as it goes. total is -1 when unknown.
+     *
+     * The file is verified against [expectedSha256] (the catalog's hash for this version; when the caller
+     * has none, the X-SHA256 header the server sends with the file is used). See [copyVerified].
+     */
+    suspend fun download(downloadUrl: String, dest: File, expectedSha256: String = "", onProgress: (Long, Long) -> Unit) = withContext(Dispatchers.IO) {
         val req = Request.Builder().url(url(downloadUrl)).get().build()
         client.newCall(req).execute().use { resp ->
             if (resp.code == 401) throw UnauthorizedException()
             if (!resp.isSuccessful) throw ApiException(resp.code, "download failed: HTTP ${resp.code}")
             val body = resp.body
-            val total = body.contentLength()
-            dest.parentFile?.mkdirs()
-            dest.outputStream().use { out ->
-                body.byteStream().use { input ->
-                    val buf = ByteArray(256 * 1024)
-                    var done = 0L
-                    var lastReport = 0L
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        done += n
-                        if (done - lastReport > 512 * 1024 || done == total) {
-                            lastReport = done
-                            onProgress(done, total)
-                        }
-                    }
-                    onProgress(done, total)
-                }
-            }
+            val expected = expectedSha256.ifBlank { resp.header("X-SHA256").orEmpty() }
+            body.byteStream().use { input -> copyVerified(input, dest, body.contentLength(), expected, onProgress) }
         }
     }
 }
